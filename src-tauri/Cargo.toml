@@ -23,6 +23,7 @@ parking_lot = "0.12"
 thiserror = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
+tauri-plugin-dialog = "2.7.2"
 
 [dev-dependencies]
 tempfile = "3"

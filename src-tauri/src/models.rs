@@ -214,6 +214,40 @@ pub struct AppConfig {
     #[serde(default = "default_prompt_task_on_block")]
     pub prompt_task_on_block_create: bool,
     pub active_widgets: Vec<String>,
+    #[serde(default)]
+    pub focus_start_chime_path: Option<String>,
+    #[serde(default)]
+    pub focus_end_chime_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnergyLogEntry {
+    pub date: String,
+    pub level: u8,
+    pub logged_at: Iso8601,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnergyLogFile {
+    pub schema_version: u32,
+    pub entries: Vec<EnergyLogEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JournalEntry {
+    pub id: Uuid,
+    pub text: String,
+    pub created_at: Iso8601,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JournalFile {
+    pub schema_version: u32,
+    pub entries: Vec<JournalEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

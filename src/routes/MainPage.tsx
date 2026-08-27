@@ -25,7 +25,7 @@ export function MainPage() {
 
   return (
     <div style={page}>
-      <header className="sb-glass" style={header}>
+      <header style={header}>
         <div>
           <p style={eyebrow}>Study Buddy</p>
           <nav style={nav}>
@@ -88,6 +88,8 @@ const header = {
   flexWrap: "wrap" as const,
   padding: "var(--sb-space-md) var(--sb-space-lg)",
   borderRadius: "var(--sb-radius-lg)",
+  background: "var(--sb-bg-overlay)",
+  border: "1px solid var(--sb-border-subtle)",
 };
 
 const eyebrow = {

@@ -7,7 +7,8 @@ import { FocusWidget } from "@/components/FocusWidget";
 import { HeatmapWidget } from "@/components/HeatmapWidget";
 import { TargetRingWidget } from "@/components/TargetRingWidget";
 import { TasksWidget } from "@/components/TasksWidget";
-import { VentWidget } from "@/components/VentWidget";
+import { EnergyWidget } from "@/components/EnergyWidget";
+import { JournalWidget } from "@/components/JournalWidget";
 import { WidgetLibrary } from "@/components/WidgetLibrary";
 import { api } from "@/lib/api";
 import { WIDGET_CATALOG, parseWidgetIds, type WidgetId } from "@/types";
@@ -21,7 +22,8 @@ const WIDGET_MAP: Record<WidgetId, () => ReactElement> = {
   target: TargetRingWidget,
   cheatsheet: CheatsheetWidget,
   breathing: BreathingWidget,
-  vent: VentWidget,
+  energy: EnergyWidget,
+  journal: JournalWidget,
 };
 
 export function WidgetsView() {

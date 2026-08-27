@@ -21,7 +21,12 @@ use timer::TimerActor;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_denylist(&["hud"])
+                .build(),
+        )
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             let _ = windows::WindowManager::focus(app, "main");
         }))
@@ -86,6 +91,7 @@ pub fn run() {
                 .map_err(|e| e.to_string())?;
 
             windows::WindowManager::validate_window_positions(app.handle());
+            commands::sync_auxiliary_window_visibility(app.handle());
 
             Ok(())
         })
@@ -112,6 +118,12 @@ pub fn run() {
             commands::config_save,
             commands::layout_get,
             commands::layout_save,
+            commands::energy_recent,
+            commands::energy_log,
+            commands::journal_list,
+            commands::journal_add,
+            commands::journal_delete,
+            commands::chime_import,
             commands::timer_subscribe,
             commands::timer_get,
             commands::timer_start,

@@ -1,6 +1,7 @@
+import { useEffect } from "react";
 import { useMetrics, useTimer } from "@/hooks/useTimer";
 import { useNow } from "@/hooks/useNow";
-import { closeWindow } from "@/lib/windows";
+import { closeWindow, openWindow } from "@/lib/windows";
 import { KineticStack, Surface } from "@/ui/kit";
 
 export function HudPage() {
@@ -11,9 +12,33 @@ export function HudPage() {
   const clock = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   const phase = isIdle ? "idle" : (tick?.phase ?? "timer").replace("_", " ");
 
+  useEffect(() => {
+    document.documentElement.style.background = "transparent";
+    document.body.style.background = "transparent";
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") closeWindow("hud");
+    }
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.documentElement.style.background = "";
+      document.body.style.background = "";
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
   return (
-    <div data-tauri-drag-region style={hudShell}>
-      <Surface padding="sm" variant="overlay" style={hudBar}>
+    <div style={hudShell} data-tauri-drag-region>
+      <Surface
+        padding="sm"
+        variant="overlay"
+        style={hudBar}
+        data-tauri-drag-region
+        onClick={() => openWindow("main")}
+        role="button"
+        title="Click to focus Study Buddy"
+      >
         <KineticStack direction="row" gap="md" align="center">
           <span
             style={{
@@ -28,9 +53,15 @@ export function HudPage() {
           <Metric label="Today" value={`${metrics?.todayCompletionPercent ?? 0}%`} />
           <button
             type="button"
+            className="sb-pressable"
             style={closeBtn}
-            onClick={() => closeWindow("hud")}
-            title="Hide HUD"
+            data-tauri-drag-region="false"
+            onClick={(event) => {
+              event.stopPropagation();
+              closeWindow("hud");
+            }}
+            title="Hide HUD (Esc)"
+            aria-label="Hide HUD"
           >
             ×
           </button>
@@ -63,6 +94,7 @@ const hudBar = {
   background: "var(--sb-bg-hud)",
   border: "1px solid var(--sb-border-glow)",
   boxShadow: "0 0 20px var(--sb-glow-accent)",
+  cursor: "pointer",
 };
 
 const pulse = {

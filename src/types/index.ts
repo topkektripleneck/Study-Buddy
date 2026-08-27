@@ -158,6 +158,20 @@ export interface AppConfig {
   coloredTimeBlocks: boolean;
   promptTaskOnBlockCreate?: boolean;
   activeWidgets: string[];
+  focusStartChimePath?: string | null;
+  focusEndChimePath?: string | null;
+}
+
+export interface EnergyLogEntry {
+  date: string;
+  level: number;
+  loggedAt: Iso8601;
+}
+
+export interface JournalEntry {
+  id: Uuid;
+  text: string;
+  createdAt: Iso8601;
 }
 
 export interface WidgetLayout {
@@ -167,7 +181,10 @@ export interface WidgetLayout {
 
 export function parseWidgetIds(ids: string[]): WidgetId[] {
   const valid = new Set<string>(WIDGET_CATALOG.map((w) => w.id));
-  return ids.filter((id): id is WidgetId => valid.has(id));
+  const aliases: Record<string, WidgetId> = { vent: "journal" };
+  return ids
+    .map((id) => aliases[id] ?? id)
+    .filter((id): id is WidgetId => valid.has(id));
 }
 
 export interface TimerTickPayload {
@@ -193,7 +210,8 @@ export type WidgetId =
   | "target"
   | "cheatsheet"
   | "breathing"
-  | "vent";
+  | "energy"
+  | "journal";
 
 export const WIDGET_CATALOG: { id: WidgetId; label: string; description: string }[] = [
   { id: "focus", label: "Focus Timer", description: "Pomodoro and stopwatch" },
@@ -203,7 +221,8 @@ export const WIDGET_CATALOG: { id: WidgetId; label: string; description: string 
   { id: "target", label: "Daily Target", description: "Focus progress ring" },
   { id: "cheatsheet", label: "Commands", description: "Command bar reference" },
   { id: "breathing", label: "Breathe", description: "Box and 4-7-8 guide" },
-  { id: "vent", label: "Venting Corner", description: "Ephemeral, never saved" },
+  { id: "energy", label: "Energy Logger", description: "Daily energy + side quests" },
+  { id: "journal", label: "Mini-Journal", description: "Timeline notes and reflections" },
 ];
 
 export const QUADRANT_META: Record<

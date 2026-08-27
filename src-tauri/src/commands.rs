@@ -5,8 +5,8 @@ use tauri_plugin_opener::OpenerExt;
 use crate::error::AppError;
 use crate::models::{
     AppConfig, CalendarTimeBlock, ConsistencyMetric, DailyFocus, EisenhowerMatrixFile,
-    EisenhowerQuadrant, EisenhowerQuadrantItem, TaskItem, TaskStatus, TimerTickPayload,
-    WidgetLayout, new_uuid, now_iso,
+    EisenhowerQuadrant, EisenhowerQuadrantItem, EnergyLogEntry, JournalEntry, TaskItem, TaskStatus,
+    TimerTickPayload, WidgetLayout, new_uuid, now_iso,
 };
 use crate::state::AppState;
 use crate::windows::WindowManager;
@@ -46,6 +46,13 @@ fn emit_window_visibility(app: &tauri::AppHandle, label: &str, open: bool) {
         "window:visibility",
         serde_json::json!({ "label": label, "open": open }),
     );
+}
+
+/// After window-state restore, sync checkbox/toggle UI in the main webview.
+pub fn sync_auxiliary_window_visibility(app: &tauri::AppHandle) {
+    for label in ["calendar", "hud"] {
+        emit_window_visibility(app, label, WindowManager::is_open(app, label));
+    }
 }
 
 #[tauri::command]
@@ -455,6 +462,75 @@ pub fn layout_get(state: State<AppState>) -> Result<WidgetLayout, String> {
 #[tauri::command]
 pub fn layout_save(state: State<AppState>, layout: WidgetLayout) -> Result<(), String> {
     state.storage.write_layout(&layout).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn energy_recent(state: State<AppState>, days: u32) -> Result<Vec<EnergyLogEntry>, String> {
+    state.storage.energy_recent(days).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn energy_log(state: State<AppState>, level: u8) -> Result<EnergyLogEntry, String> {
+    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let entry = state
+        .storage
+        .log_energy(&date, level)
+        .map_err(|e| e.to_string())?;
+    let _ = state.timer.app().emit("energy:changed", &entry);
+    Ok(entry)
+}
+
+#[tauri::command]
+pub fn journal_list(state: State<AppState>) -> Result<Vec<JournalEntry>, String> {
+    state
+        .storage
+        .read_journal()
+        .map(|f| f.entries)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn journal_add(state: State<AppState>, text: String) -> Result<JournalEntry, String> {
+    let entry = state.storage.journal_add(&text).map_err(|e| e.to_string())?;
+    let _ = state.timer.app().emit("journal:changed", &entry);
+    Ok(entry)
+}
+
+#[tauri::command]
+pub fn journal_delete(state: State<AppState>, entry_id: String) -> Result<(), String> {
+    state
+        .storage
+        .journal_delete(&entry_id)
+        .map_err(|e| e.to_string())?;
+    let _ = state.timer.app().emit("journal:changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn chime_import(
+    state: State<AppState>,
+    source_path: String,
+    slot: String,
+) -> Result<AppConfig, String> {
+    if slot != "start" && slot != "end" {
+        return Err("slot must be start or end".into());
+    }
+    let dest = state
+        .storage
+        .import_chime(&source_path, &slot)
+        .map_err(|e| e.to_string())?;
+    let mut config = state.storage.read_config().map_err(|e| e.to_string())?;
+    if slot == "start" {
+        config.focus_start_chime_path = Some(dest);
+    } else {
+        config.focus_end_chime_path = Some(dest);
+    }
+    state
+        .storage
+        .write_config(&config)
+        .map_err(|e| e.to_string())?;
+    let _ = state.timer.app().emit("config:changed", &config);
+    Ok(config)
 }
 
 #[tauri::command]

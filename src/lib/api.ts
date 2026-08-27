@@ -6,6 +6,8 @@ import type {
   DailyFocus,
   EisenhowerMatrixFile,
   EisenhowerQuadrant,
+  EnergyLogEntry,
+  JournalEntry,
   TaskItem,
   TimerTickPayload,
   WidgetLayout,
@@ -42,6 +44,16 @@ export const api = {
 
   layoutGet: () => invoke<WidgetLayout>("layout_get"),
   layoutSave: (layout: WidgetLayout) => invoke<void>("layout_save", { layout }),
+
+  energyRecent: (days: number) => invoke<EnergyLogEntry[]>("energy_recent", { days }),
+  energyLog: (level: number) => invoke<EnergyLogEntry>("energy_log", { level }),
+
+  journalList: () => invoke<JournalEntry[]>("journal_list"),
+  journalAdd: (text: string) => invoke<JournalEntry>("journal_add", { text }),
+  journalDelete: (entryId: string) => invoke<void>("journal_delete", { entryId }),
+
+  chimeImport: (sourcePath: string, slot: "start" | "end") =>
+    invoke<AppConfig>("chime_import", { sourcePath, slot }),
 
   timerGet: () => invoke<TimerTickPayload | null>("timer_get"),
   timerStart: (protocol?: string, durationMinutes?: number) =>

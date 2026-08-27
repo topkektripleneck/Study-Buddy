@@ -6,6 +6,7 @@ import {
   pauseTimer,
   resetTimer,
   resumeTimer,
+  setHud,
   skipPhase,
   startFocus,
   startStopwatch,
@@ -18,7 +19,7 @@ const FOCUS_PRESETS = [15, 25, 50];
 export function FocusWidget() {
   const { displayTime, isRunning, isPaused, isIdle, tick } = useTimer();
   const [focusMinutes, setFocusMinutes] = useState(25);
-  const { open: hudOpen, toggle: toggleHudWindow } = useWindowOpen("hud");
+  const { open: hudOpen } = useWindowOpen("hud");
 
   useEffect(() => {
     api.configGet().then((c) => setFocusMinutes(c.pomodoroFocusMinutes));
@@ -102,7 +103,12 @@ export function FocusWidget() {
             </div>
           )}
 
-          <button type="button" style={linkBtn} onClick={() => toggleHudWindow()}>
+          <button
+            type="button"
+            className="sb-pressable"
+            style={linkBtn}
+            onClick={() => (hudOpen ? setHud(false) : setHud(true))}
+          >
             {hudOpen ? "Hide HUD" : "Show HUD"}
           </button>
         </KineticStack>

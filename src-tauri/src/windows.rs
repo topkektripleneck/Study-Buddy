@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::error::AppError;
 
@@ -118,7 +118,9 @@ impl WindowManager {
                     .decorations(false)
                     .resizable(false)
                     .always_on_top(true)
-                    .skip_taskbar(true);
+                    .skip_taskbar(true)
+                    .transparent(true)
+                    .shadow(false);
             }
         }
 
@@ -130,6 +132,16 @@ impl WindowManager {
         // predictable or it looks like nothing opened at all.
         if matches!(profile, WindowProfile::Hud) {
             park_top_right(app, &window, width);
+            let app_handle = app.clone();
+            let label = label.to_string();
+            window.on_window_event(move |event| {
+                if matches!(event, tauri::WindowEvent::Destroyed) {
+                    let _ = app_handle.emit(
+                        "window:visibility",
+                        serde_json::json!({ "label": label, "open": false }),
+                    );
+                }
+            });
         }
 
         Ok(())

@@ -9,7 +9,8 @@ use serde::Serialize;
 use crate::error::AppError;
 use crate::models::{
     ActivityLogRecord, AppConfig, CalendarTimeBlock, ConsistencyMetric, DailyFocus,
-    EisenhowerMatrixFile, SchemaFile, TaskItem, TimerSession, WidgetLayout,
+    EisenhowerMatrixFile, EnergyLogEntry, EnergyLogFile, JournalEntry, JournalFile, SchemaFile,
+    TaskItem, TimerSession, WidgetLayout, new_uuid, now_iso,
 };
 
 const SCHEMA_VERSION: u32 = 1;
@@ -31,7 +32,7 @@ impl StorageEngine {
     }
 
     fn ensure_dirs(&self) -> Result<(), AppError> {
-        for dir in ["layout", "activity", "journal", "backups"] {
+        for dir in ["layout", "activity", "journal", "backups", "chimes"] {
             fs::create_dir_all(self.root.join(dir))
                 .map_err(|e| AppError::Storage(format!("create dir {dir}: {e}")))?;
         }
@@ -46,6 +47,8 @@ impl StorageEngine {
         self.init_if_missing("calendar.json", &Vec::<CalendarTimeBlock>::new())?;
         self.init_if_missing("metrics.json", &default_metrics())?;
         self.init_if_missing("layout/main.json", &default_layout())?;
+        self.init_if_missing("energy.json", &default_energy())?;
+        self.init_if_missing("journal/entries.json", &default_journal())?;
         Ok(())
     }
 
@@ -259,6 +262,94 @@ impl StorageEngine {
         self.write_atomic("layout/main.json", layout)
     }
 
+    pub fn read_energy(&self) -> Result<EnergyLogFile, AppError> {
+        self.read_json("energy.json")
+    }
+
+    pub fn log_energy(&self, date: &str, level: u8) -> Result<EnergyLogEntry, AppError> {
+        if !(1..=5).contains(&level) {
+            return Err(AppError::Storage("energy level must be 1-5".into()));
+        }
+        let mut file = self.read_energy()?;
+        file.entries.retain(|e| e.date != date);
+        let entry = EnergyLogEntry {
+            date: date.to_string(),
+            level,
+            logged_at: now_iso(),
+        };
+        file.entries.push(entry.clone());
+        file.entries.sort_by(|a, b| b.date.cmp(&a.date));
+        self.write_atomic("energy.json", &file)?;
+        Ok(entry)
+    }
+
+    pub fn energy_recent(&self, days: u32) -> Result<Vec<EnergyLogEntry>, AppError> {
+        let file = self.read_energy()?;
+        let today = Local::now().date_naive();
+        let first = today - Duration::days((days.saturating_sub(1)) as i64);
+        Ok(file
+            .entries
+            .into_iter()
+            .filter(|e| {
+                chrono::NaiveDate::parse_from_str(&e.date, "%Y-%m-%d")
+                    .map(|d| d >= first && d <= today)
+                    .unwrap_or(false)
+            })
+            .collect())
+    }
+
+    pub fn read_journal(&self) -> Result<JournalFile, AppError> {
+        self.read_json("journal/entries.json")
+    }
+
+    pub fn journal_add(&self, text: &str) -> Result<JournalEntry, AppError> {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            return Err(AppError::Storage("journal entry cannot be empty".into()));
+        }
+        let mut file = self.read_journal()?;
+        let entry = JournalEntry {
+            id: new_uuid(),
+            text: trimmed.to_string(),
+            created_at: now_iso(),
+        };
+        file.entries.insert(0, entry.clone());
+        self.write_atomic("journal/entries.json", &file)?;
+        Ok(entry)
+    }
+
+    pub fn journal_delete(&self, entry_id: &str) -> Result<(), AppError> {
+        let mut file = self.read_journal()?;
+        let before = file.entries.len();
+        file.entries.retain(|e| e.id != entry_id);
+        if file.entries.len() == before {
+            return Err(AppError::NotFound(entry_id.to_string()));
+        }
+        self.write_atomic("journal/entries.json", &file)
+    }
+
+    pub fn import_chime(&self, source: &str, slot: &str) -> Result<String, AppError> {
+        let source_path = Path::new(source);
+        if !source_path.is_file() {
+            return Err(AppError::NotFound(source.to_string()));
+        }
+        let ext = source_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("mp3")
+            .to_ascii_lowercase();
+        if ext != "mp3" && ext != "wav" {
+            return Err(AppError::Storage("chime must be .mp3 or .wav".into()));
+        }
+        let dest = self
+            .root
+            .join("chimes")
+            .join(format!("{slot}.{ext}"));
+        fs::copy(source_path, &dest)
+            .map_err(|e| AppError::Storage(format!("copy chime: {e}")))?;
+        Ok(dest.to_string_lossy().to_string())
+    }
+
     pub fn read_session(&self) -> Result<Option<TimerSession>, AppError> {
         let path = self.root.join("session.json");
         if !path.exists() {
@@ -304,6 +395,8 @@ fn default_config() -> AppConfig {
         colored_time_blocks: true,
         prompt_task_on_block_create: true,
         active_widgets: vec!["focus".to_string(), "clock".to_string()],
+        focus_start_chime_path: None,
+        focus_end_chime_path: None,
     }
 }
 
@@ -333,6 +426,20 @@ fn default_layout() -> WidgetLayout {
     WidgetLayout {
         schema_version: SCHEMA_VERSION,
         widget_ids: vec!["focus".to_string(), "clock".to_string()],
+    }
+}
+
+fn default_energy() -> EnergyLogFile {
+    EnergyLogFile {
+        schema_version: SCHEMA_VERSION,
+        entries: vec![],
+    }
+}
+
+fn default_journal() -> JournalFile {
+    JournalFile {
+        schema_version: SCHEMA_VERSION,
+        entries: vec![],
     }
 }
 
