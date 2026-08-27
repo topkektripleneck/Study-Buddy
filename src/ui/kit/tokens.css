@@ -1,0 +1,78 @@
+:root {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --sb-bg-base: #0a0c10;
+  --sb-bg-raised: #12151c;
+  --sb-bg-overlay: #181c26;
+  --sb-bg-hud: rgba(10, 12, 16, 0.92);
+
+  /* Text */
+  --sb-text-primary: #eef1f8;
+  --sb-text-secondary: #9aa3b5;
+  --sb-text-muted: #5c6578;
+
+  /* Accent & glow (originkit kinetic palette) */
+  --sb-accent: #6ee7ff;
+  --sb-accent-dim: #2a8fa3;
+  --sb-glow-accent: rgba(110, 231, 255, 0.45);
+  --sb-glow-warm: rgba(255, 160, 90, 0.35);
+  --sb-glow-success: rgba(110, 255, 180, 0.3);
+
+  /* Borders */
+  --sb-border-subtle: rgba(255, 255, 255, 0.06);
+  --sb-border-glow: rgba(110, 231, 255, 0.25);
+
+  /* Motion */
+  --sb-ease-kinetic: cubic-bezier(0.22, 1, 0.36, 1);
+  --sb-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --sb-duration-fast: 120ms;
+  --sb-duration-normal: 220ms;
+  --sb-duration-slow: 380ms;
+
+  /* Radius & spacing */
+  --sb-radius-sm: 6px;
+  --sb-radius-md: 12px;
+  --sb-radius-lg: 18px;
+  --sb-space-xs: 4px;
+  --sb-space-sm: 8px;
+  --sb-space-md: 16px;
+  --sb-space-lg: 24px;
+  --sb-space-xl: 32px;
+
+  /* Typography */
+  --sb-font-sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --sb-font-mono: "Cascadia Code", "Consolas", monospace;
+
+  font-family: var(--sb-font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--sb-text-primary);
+  background: var(--sb-bg-base);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+a {
+  color: var(--sb-accent);
+}
