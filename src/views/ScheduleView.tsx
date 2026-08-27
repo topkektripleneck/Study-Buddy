@@ -1,9 +1,9 @@
-import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AddTimeBlockModal, type TimeBlockDraft } from "@/components/AddTimeBlockModal";
+import { AddTimeBlockModal } from "@/components/AddTimeBlockModal";
 import { TaskPromptModal } from "@/components/TaskPromptModal";
+import { useListen } from "@/hooks/useListen";
 import { useNow } from "@/hooks/useNow";
-import { addBlock, deleteBlock, replaceBlocks } from "@/lib/actions";
+import { addBlock, deleteBlock, linkBlockToTask, resolveBlockConflict } from "@/lib/actions";
 import { api } from "@/lib/api";
 import {
   HOUR_ROW_HEIGHT,
@@ -18,7 +18,7 @@ import {
   timelineHeightPx,
 } from "@/lib/schedule";
 import { PressableEnergy, Surface } from "@/ui/kit";
-import type { AppConfig, CalendarTimeBlock, TaskItem } from "@/types";
+import type { AppConfig, CalendarTimeBlock, PendingConflict, TaskItem, TimeBlockDraft } from "@/types";
 
 const COLOR_MAP: Record<string, string> = {
   accent: "var(--sb-accent)",
@@ -38,10 +38,7 @@ export function ScheduleView() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [slot, setSlot] = useState<SlotTarget | null>(null);
   const [pendingTaskBlock, setPendingTaskBlock] = useState<CalendarTimeBlock | null>(null);
-  const [conflict, setConflict] = useState<{
-    block: CalendarTimeBlock;
-    conflicts: CalendarTimeBlock[];
-  } | null>(null);
+  const [conflict, setConflict] = useState<PendingConflict | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const now = useNow(15_000);
@@ -69,12 +66,9 @@ export function ScheduleView() {
 
   useEffect(() => {
     refresh();
-    const unsubs: (() => void)[] = [];
-    listen("calendar:changed", () => refresh()).then((u) => unsubs.push(u));
-    listen("tasks:changed", () => refresh()).then((u) => unsubs.push(u));
-    listen("config:changed", () => refresh()).then((u) => unsubs.push(u));
-    return () => unsubs.forEach((u) => u());
   }, [refresh]);
+
+  useListen(refresh, "calendar:changed", "tasks:changed", "config:changed");
 
   const todayBlocks = useMemo(
     () =>
@@ -104,48 +98,38 @@ export function ScheduleView() {
   }
 
   async function saveBlock(draft: TimeBlockDraft) {
-    try {
-      const start = { hour: draft.hour, minute: draft.minute };
-      const outcome = await addBlock({
-        title: draft.title,
-        kind: draft.kind,
-        start,
-        end: endTimeFrom(start, draft.durationMinutes),
-      });
+    const start = { hour: draft.hour, minute: draft.minute };
+    const outcome = await addBlock({
+      title: draft.title,
+      kind: draft.kind,
+      start,
+      end: endTimeFrom(start, draft.durationMinutes),
+    });
 
-      if (outcome.block && outcome.conflicts.length > 0) {
-        setConflict({ block: outcome.block, conflicts: outcome.conflicts });
-        return;
-      }
-      if (!outcome.ok || !outcome.block) {
-        setError(outcome.message);
-        return;
-      }
-      afterBlockSaved(outcome.block);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save time block");
+    if (outcome.block && outcome.conflicts.length > 0) {
+      setConflict({ block: outcome.block, conflicts: outcome.conflicts });
+      return;
     }
+    if (!outcome.ok || !outcome.block) {
+      setError(outcome.message);
+      return;
+    }
+    afterBlockSaved(outcome.block);
   }
 
   async function resolveConflict(choice: "replace" | "keep-both" | "cancel") {
     if (!conflict) return;
     const { block, conflicts } = conflict;
-
-    if (choice === "cancel") {
+    const outcome = await resolveBlockConflict(choice, block, conflicts);
+    if (!outcome) {
       setConflict(null);
       return;
     }
-
-    try {
-      if (choice === "replace") {
-        await replaceBlocks(conflicts, block);
-      } else {
-        await api.calendarSaveBlock(block);
-      }
-      afterBlockSaved(block);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not resolve the conflict");
+    if (!outcome.ok) {
+      setError(outcome.message);
+      return;
     }
+    afterBlockSaved(block);
   }
 
   async function handleTaskPrompt(createTask: boolean) {
@@ -155,36 +139,21 @@ export function ScheduleView() {
 
     if (!createTask) return;
 
-    try {
-      const task = await api.taskCreate(block.title);
-      const linkedTask: TaskItem = {
-        ...task,
-        linkedBlockIds: [...task.linkedBlockIds, block.id],
-        estimateMinutes: Math.round(
-          (new Date(block.endAt).getTime() - new Date(block.startAt).getTime()) / 60_000,
-        ),
-      };
-      await api.taskUpdate(linkedTask);
-
-      const linkedBlock: CalendarTimeBlock = {
-        ...block,
-        taskId: task.id,
-        updatedAt: new Date().toISOString(),
-      };
-      await api.calendarSaveBlock(linkedBlock);
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not create linked task");
+    const result = await linkBlockToTask(block);
+    if (!result.ok) {
+      setError(result.message);
+      return;
     }
+    await refresh();
   }
 
   async function removeBlock(blockId: string) {
-    try {
-      await deleteBlock(blockId);
-      setBlocks((prev) => prev.filter((b) => b.id !== blockId));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not delete block");
+    const result = await deleteBlock(blockId);
+    if (!result.ok) {
+      setError(result.message);
+      return;
     }
+    setBlocks((prev) => prev.filter((b) => b.id !== blockId));
   }
 
   return (
@@ -308,6 +277,23 @@ export function ScheduleView() {
         </Surface>
       </div>
 
+      {conflict && (
+        <p style={conflictBanner}>
+          "{conflict.block.title}" overlaps {conflict.conflicts.map((c) => c.title).join(", ")} —{" "}
+          <button type="button" style={conflictBtn} onClick={() => resolveConflict("replace")}>
+            Replace
+          </button>
+          {" · "}
+          <button type="button" style={conflictBtn} onClick={() => resolveConflict("keep-both")}>
+            Keep both
+          </button>
+          {" · "}
+          <button type="button" style={conflictBtn} onClick={() => resolveConflict("cancel")}>
+            Cancel
+          </button>
+        </p>
+      )}
+
       {slot && (
         <AddTimeBlockModal
           initialHour={slot.hour}
@@ -315,34 +301,6 @@ export function ScheduleView() {
           onSave={saveBlock}
           onClose={() => setSlot(null)}
         />
-      )}
-
-      {conflict && (
-        <div style={overlay} role="presentation" onClick={() => resolveConflict("cancel")}>
-          <Surface
-            padding="lg"
-            variant="overlay"
-            style={conflictPanel}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={conflictHeading}>Time conflict</h3>
-            <p style={conflictBody}>
-              "{conflict.block.title}" overlaps{" "}
-              {conflict.conflicts.map((c) => `"${c.title}"`).join(", ")}.
-            </p>
-            <div style={conflictActions}>
-              <PressableEnergy onClick={() => resolveConflict("replace")}>
-                Replace existing
-              </PressableEnergy>
-              <PressableEnergy variant="ghost" onClick={() => resolveConflict("keep-both")}>
-                Keep both
-              </PressableEnergy>
-              <PressableEnergy variant="ghost" onClick={() => resolveConflict("cancel")}>
-                Cancel
-              </PressableEnergy>
-            </div>
-          </Surface>
-        </div>
       )}
 
       {pendingTaskBlock && (
@@ -490,24 +448,23 @@ const deleteBtn = {
   lineHeight: 1,
   fontSize: "14px",
 };
-const overlay = {
-  position: "fixed" as const,
-  inset: 0,
-  background: "rgba(0,0,0,0.55)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  zIndex: 100,
-};
-const conflictPanel = { width: "min(440px, 92vw)" };
-const conflictHeading = { margin: "0 0 8px", fontSize: "18px" };
-const conflictBody = {
-  margin: "0 0 16px",
+const conflictBanner = {
+  margin: "0 0 12px",
+  padding: "8px 12px",
+  borderRadius: "var(--sb-radius-sm)",
+  background: "rgba(255,180,80,0.12)",
+  color: "#ffcc88",
   fontSize: "13px",
-  color: "var(--sb-text-secondary)",
-  lineHeight: 1.5,
 };
-const conflictActions = { display: "flex", gap: "8px", flexWrap: "wrap" as const };
+const conflictBtn = {
+  border: "none",
+  background: "transparent",
+  color: "var(--sb-accent)",
+  cursor: "pointer",
+  font: "inherit",
+  textDecoration: "underline",
+  padding: 0,
+};
 const errorBanner = {
   margin: "0 0 12px",
   padding: "8px 12px",

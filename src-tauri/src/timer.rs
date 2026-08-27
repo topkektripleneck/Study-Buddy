@@ -1,4 +1,3 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -15,7 +14,6 @@ use crate::models::{
 };
 use crate::storage::StorageEngine;
 
-static SUBSCRIBER_ID: AtomicU64 = AtomicU64::new(1);
 static MONO_START: OnceLock<Instant> = OnceLock::new();
 
 /// Intervals shorter than this are treated as false starts and are not logged.
@@ -28,7 +26,6 @@ pub fn mono_ms() -> u64 {
 }
 
 struct Subscriber {
-    id: u64,
     channel: Channel<TimerTickPayload>,
 }
 
@@ -70,8 +67,7 @@ impl TimerActor {
     }
 
     pub fn subscribe(&self, channel: Channel<TimerTickPayload>) {
-        let id = SUBSCRIBER_ID.fetch_add(1, Ordering::Relaxed);
-        self.subscribers.lock().push(Subscriber { id, channel });
+        self.subscribers.lock().push(Subscriber { channel });
         if let Some(tick) = self.compute_tick(false) {
             let _ = self.push_tick(&tick);
         }
@@ -232,8 +228,6 @@ impl TimerActor {
             .ok_or_else(|| AppError::Timer("no tick".into()))
     }
 
-    /// Appends a finished focus/stopwatch interval to the activity log and
-    /// refreshes the derived consistency metrics.
     fn record_interval(
         &self,
         phase: TimerPhase,
@@ -341,7 +335,6 @@ impl TimerActor {
     fn push_tick(&self, tick: &TimerTickPayload) -> Result<(), AppError> {
         let mut subs = self.subscribers.lock();
         subs.retain(|sub| sub.channel.send(tick.clone()).is_ok());
-        let _ = self.app.emit("timer:tick", tick);
         Ok(())
     }
 

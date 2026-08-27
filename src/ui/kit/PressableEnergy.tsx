@@ -9,6 +9,7 @@ export interface PressableEnergyProps
 export function PressableEnergy({
   children,
   variant = "primary",
+  className,
   style,
   ...props
 }: PressableEnergyProps) {
@@ -21,7 +22,6 @@ export function PressableEnergy({
     borderRadius: "var(--sb-radius-sm)",
     border: "1px solid transparent",
     fontWeight: 600,
-    transition: `transform var(--sb-duration-fast) var(--sb-ease-spring), box-shadow var(--sb-duration-fast) var(--sb-ease-kinetic), background var(--sb-duration-fast)`,
     ...style,
   } as const;
 
@@ -42,19 +42,8 @@ export function PressableEnergy({
   return (
     <button
       type="button"
+      className={["sb-pressable", className].filter(Boolean).join(" ")}
       style={{ ...base, ...variants[variant] }}
-      onMouseDown={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.transform = "scale(0.97)";
-        props.onMouseDown?.(e);
-      }}
-      onMouseUp={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)";
-        props.onMouseUp?.(e);
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)";
-        props.onMouseLeave?.(e);
-      }}
       {...props}
     >
       {children}

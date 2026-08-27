@@ -1,5 +1,5 @@
-import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import { useListen } from "@/hooks/useListen";
 import { useMetrics } from "@/hooks/useTimer";
 import { api } from "@/lib/api";
 import { Surface } from "@/ui/kit";
@@ -10,28 +10,29 @@ const DAYS = 28;
 export function HeatmapWidget() {
   const { metrics } = useMetrics();
   const [days, setDays] = useState<DailyFocus[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       setDays(await api.activityDailyTotals(DAYS));
-    } catch {
-      setDays([]);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load activity");
     }
   }, []);
 
   useEffect(() => {
     refresh();
-    const unlisten = listen("metrics:changed", () => refresh());
-    return () => {
-      unlisten.then((u) => u());
-    };
   }, [refresh]);
+
+  useListen(refresh, "metrics:changed");
 
   const targetMs = (metrics?.dailyTargetMinutes ?? 120) * 60_000;
 
   return (
     <Surface padding="md">
       <h3 style={title}>Activity</h3>
+      {error && <p style={metaError}>{error}</p>}
       <div style={grid}>
         {days.map((day) => {
           const ratio = targetMs > 0 ? Math.min(day.focusMs / targetMs, 1) : 0;
@@ -77,4 +78,9 @@ const meta = {
   margin: "12px 0 0",
   fontSize: "12px",
   color: "var(--sb-text-secondary)",
+};
+const metaError = {
+  margin: "0 0 8px",
+  fontSize: "12px",
+  color: "#ffaaaa",
 };

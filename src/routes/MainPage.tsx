@@ -25,7 +25,7 @@ export function MainPage() {
 
   return (
     <div style={page}>
-      <header style={header}>
+      <header className="sb-glass" style={header}>
         <div>
           <p style={eyebrow}>Study Buddy</p>
           <nav style={nav}>
@@ -33,6 +33,7 @@ export function MainPage() {
               <button
                 key={t.id}
                 type="button"
+                className="sb-pressable sb-pressable-hover"
                 style={{
                   ...tabBtn,
                   ...(tab === t.id ? tabActive : {}),
@@ -85,12 +86,14 @@ const header = {
   marginBottom: "var(--sb-space-lg)",
   gap: "var(--sb-space-md)",
   flexWrap: "wrap" as const,
+  padding: "var(--sb-space-md) var(--sb-space-lg)",
+  borderRadius: "var(--sb-radius-lg)",
 };
 
 const eyebrow = {
   margin: "0 0 8px",
   fontSize: "12px",
-  letterSpacing: "0.12em",
+  letterSpacing: "var(--sb-tracking-caps)",
   textTransform: "uppercase" as const,
   color: "var(--sb-text-muted)",
 };

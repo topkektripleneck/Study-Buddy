@@ -188,13 +188,17 @@ impl StorageEngine {
 
     pub fn append_activity(&self, record: &ActivityLogRecord) -> Result<(), AppError> {
         let rel = activity_file_for(&record.local_date);
-        let mut records = self.read_activity_month(&rel);
+        let mut records = self.read_activity_month(&rel)?;
         records.push(record.clone());
         self.write_atomic(&rel, &records)
     }
 
-    fn read_activity_month(&self, rel: &str) -> Vec<ActivityLogRecord> {
-        self.read_json(rel).unwrap_or_default()
+    fn read_activity_month(&self, rel: &str) -> Result<Vec<ActivityLogRecord>, AppError> {
+        match self.read_json(rel) {
+            Ok(records) => Ok(records),
+            Err(AppError::NotFound(_)) => Ok(vec![]),
+            Err(err) => Err(err),
+        }
     }
 
     /// Focus totals per local day for the last `days` days, oldest first.
@@ -203,7 +207,7 @@ impl StorageEngine {
         &self,
         days: u32,
         daily_target_minutes: u32,
-    ) -> Vec<DailyFocus> {
+    ) -> Result<Vec<DailyFocus>, AppError> {
         let today = Local::now().date_naive();
         let span = days.max(1) as i64;
         let first = today - Duration::days(span - 1);
@@ -220,13 +224,13 @@ impl StorageEngine {
 
         let mut totals: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
         for month in months {
-            for record in self.read_activity_month(&format!("activity/{month}.json")) {
+            for record in self.read_activity_month(&format!("activity/{month}.json"))? {
                 *totals.entry(record.local_date.clone()).or_insert(0) += record.duration_ms;
             }
         }
 
         let target_ms = daily_target_minutes as u64 * 60_000;
-        (0..span)
+        Ok((0..span)
             .map(|offset| {
                 let date = (first + Duration::days(offset)).format("%Y-%m-%d").to_string();
                 let focus_ms = totals.get(&date).copied().unwrap_or(0);
@@ -236,7 +240,7 @@ impl StorageEngine {
                     focus_ms,
                 }
             })
-            .collect()
+            .collect())
     }
 
     pub fn read_config(&self) -> Result<AppConfig, AppError> {

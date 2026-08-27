@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   AppConfig,
   CalendarTimeBlock,
@@ -12,7 +12,6 @@ import type {
 } from "@/types";
 
 export const api = {
-  getDataDir: () => invoke<string>("storage_get_data_dir"),
   openDataDir: () => invoke<void>("storage_open_data_dir"),
 
   tasksList: () => invoke<TaskItem[]>("tasks_list"),
@@ -23,8 +22,6 @@ export const api = {
   taskDelete: (taskId: string) => invoke<void>("task_delete", { taskId }),
 
   matrixGet: () => invoke<EisenhowerMatrixFile>("matrix_get"),
-  matrixSave: (matrix: EisenhowerMatrixFile) =>
-    invoke<void>("matrix_save", { matrix }),
   matrixSetQuadrant: (taskId: string, quadrant: EisenhowerQuadrant) =>
     invoke<EisenhowerMatrixFile>("matrix_set_quadrant", { taskId, quadrant }),
   matrixRemoveItem: (itemId: string) =>
@@ -37,7 +34,6 @@ export const api = {
     invoke<void>("calendar_delete_block", { blockId }),
 
   metricsGet: () => invoke<ConsistencyMetric>("metrics_get"),
-  metricsRecalculate: () => invoke<ConsistencyMetric>("metrics_recalculate"),
   activityDailyTotals: (days: number) =>
     invoke<DailyFocus[]>("activity_daily_totals", { days }),
 
@@ -54,6 +50,6 @@ export const api = {
   timerResume: () => invoke<TimerTickPayload>("timer_resume"),
   timerReset: () => invoke<void>("timer_reset"),
   timerSkipPhase: () => invoke<TimerTickPayload>("timer_skip_phase"),
-  timerSubscribe: (channel: unknown) =>
+  timerSubscribe: (channel: Channel<TimerTickPayload>) =>
     invoke<void>("timer_subscribe", { channel }),
 };

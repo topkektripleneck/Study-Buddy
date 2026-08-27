@@ -12,7 +12,7 @@ const HISTORY_DAYS: u32 = 370;
 pub fn recalculate(storage: &StorageEngine) -> Result<ConsistencyMetric, AppError> {
     let mut metric = storage.read_metrics()?;
     let target_minutes = metric.daily_target_minutes.max(1);
-    let history = storage.daily_focus_totals(HISTORY_DAYS, target_minutes);
+    let history = storage.daily_focus_totals(HISTORY_DAYS, target_minutes)?;
 
     let today = Local::now().format("%Y-%m-%d").to_string();
     let today_focus_ms = history

@@ -49,15 +49,6 @@ fn emit_window_visibility(app: &tauri::AppHandle, label: &str, open: bool) {
 }
 
 #[tauri::command]
-pub fn storage_get_data_dir(state: State<AppState>) -> Result<String, String> {
-    Ok(state
-        .storage
-        .root()
-        .to_string_lossy()
-        .to_string())
-}
-
-#[tauri::command]
 pub fn storage_open_data_dir(app: tauri::AppHandle, state: State<AppState>) -> Result<(), String> {
     let path = state.storage.root().to_string_lossy().to_string();
     app.opener()
@@ -225,17 +216,6 @@ pub fn task_delete(state: State<AppState>, task_id: String) -> Result<(), String
 #[tauri::command]
 pub fn matrix_get(state: State<AppState>) -> Result<EisenhowerMatrixFile, String> {
     state.storage.read_matrix().map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn matrix_save(state: State<AppState>, matrix: EisenhowerMatrixFile) -> Result<(), String> {
-    state.storage.write_matrix(&matrix).map_err(|e| e.to_string())?;
-    let rev = state.bump_revision();
-    let _ = state.timer.app().emit(
-        "matrix:changed",
-        serde_json::json!({ "kind": "updated", "revision": rev }),
-    );
-    Ok(())
 }
 
 /// Places a task in a quadrant, moving it if it is already placed elsewhere.
@@ -435,11 +415,6 @@ pub fn metrics_get(state: State<AppState>) -> Result<ConsistencyMetric, String> 
 }
 
 #[tauri::command]
-pub fn metrics_recalculate(state: State<AppState>) -> Result<ConsistencyMetric, String> {
-    crate::metrics::recalculate(&state.storage).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
 pub fn activity_daily_totals(
     state: State<AppState>,
     days: u32,
@@ -449,7 +424,7 @@ pub fn activity_daily_totals(
         .read_metrics()
         .map(|m| m.daily_target_minutes)
         .unwrap_or(120);
-    Ok(state.storage.daily_focus_totals(days, target))
+    Ok(state.storage.daily_focus_totals(days, target)?)
 }
 
 #[tauri::command]

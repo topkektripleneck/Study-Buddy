@@ -2,7 +2,6 @@ import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import { isWindowOpen, toggleWindow, type WindowLabel } from "@/lib/windows";
 
-/** Tracks whether an auxiliary window is currently open, and lets callers toggle it. */
 export function useWindowOpen(label: WindowLabel) {
   const [open, setOpen] = useState(false);
 
@@ -28,5 +27,5 @@ export function useWindowOpen(label: WindowLabel) {
     return next;
   }, [label]);
 
-  return { open, toggle, setOpen };
+  return { open, toggle };
 }

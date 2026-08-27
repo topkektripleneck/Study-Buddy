@@ -1,13 +1,8 @@
-import { useEffect, useState } from "react";
+import { useNow } from "@/hooks/useNow";
 import { Surface } from "@/ui/kit";
 
 export function ClockWidget() {
-  const [time, setTime] = useState(() => new Date());
-
-  useEffect(() => {
-    const id = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
+  const time = useNow(1000);
 
   return (
     <Surface padding="lg">
@@ -33,6 +28,8 @@ const clock = {
   fontFamily: "var(--sb-font-mono)",
   fontSize: "36px",
   fontWeight: 700,
+  lineHeight: 1.05,
+  letterSpacing: "var(--sb-tracking-tight)",
 };
 
 const date = {

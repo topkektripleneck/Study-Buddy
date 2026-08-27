@@ -1,12 +1,16 @@
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
+import { BreathingWidget } from "@/components/BreathingWidget";
+import { CheatsheetWidget } from "@/components/CheatsheetWidget";
 import { ClockWidget } from "@/components/ClockWidget";
 import { FocusWidget } from "@/components/FocusWidget";
 import { HeatmapWidget } from "@/components/HeatmapWidget";
+import { TargetRingWidget } from "@/components/TargetRingWidget";
 import { TasksWidget } from "@/components/TasksWidget";
+import { VentWidget } from "@/components/VentWidget";
 import { WidgetLibrary } from "@/components/WidgetLibrary";
 import { api } from "@/lib/api";
-import type { WidgetId } from "@/types";
+import { WIDGET_CATALOG, parseWidgetIds, type WidgetId } from "@/types";
 import { GlowBorder, KineticStack, PressableEnergy } from "@/ui/kit";
 
 const WIDGET_MAP: Record<WidgetId, () => ReactElement> = {
@@ -14,6 +18,10 @@ const WIDGET_MAP: Record<WidgetId, () => ReactElement> = {
   clock: ClockWidget,
   tasks: TasksWidget,
   heatmap: HeatmapWidget,
+  target: TargetRingWidget,
+  cheatsheet: CheatsheetWidget,
+  breathing: BreathingWidget,
+  vent: VentWidget,
 };
 
 export function WidgetsView() {
@@ -22,7 +30,7 @@ export function WidgetsView() {
 
   useEffect(() => {
     api.layoutGet().then((layout) => {
-      setWidgetIds(layout.widgetIds as WidgetId[]);
+      setWidgetIds(parseWidgetIds(layout.widgetIds));
     });
   }, []);
 
@@ -37,6 +45,10 @@ export function WidgetsView() {
     setLibraryOpen(false);
   }
 
+  function removeWidget(id: WidgetId) {
+    saveWidgets(widgetIds.filter((widgetId) => widgetId !== id));
+  }
+
   return (
     <div>
       <KineticStack direction="row" gap="sm" style={{ marginBottom: "var(--sb-space-md)" }}>
@@ -46,7 +58,23 @@ export function WidgetsView() {
       <div style={grid}>
         {widgetIds.map((id) => {
           const Widget = WIDGET_MAP[id];
-          return Widget ? <Widget key={id} /> : null;
+          if (!Widget) return null;
+          const label = WIDGET_CATALOG.find((w) => w.id === id)?.label ?? id;
+          return (
+            <div key={id} style={slot}>
+              <Widget />
+              <button
+                type="button"
+                className="sb-pressable"
+                style={removeButton}
+                onClick={() => removeWidget(id)}
+                title={`Remove ${label}`}
+                aria-label={`Remove ${label}`}
+              >
+                ×
+              </button>
+            </div>
+          );
         })}
 
         <GlowBorder tone="warm">
@@ -73,6 +101,25 @@ const grid = {
   gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
   gap: "var(--sb-space-md)",
 } as const;
+
+const slot = { position: "relative" as const };
+
+const removeButton = {
+  position: "absolute" as const,
+  top: "6px",
+  right: "6px",
+  width: "22px",
+  height: "22px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: "var(--sb-radius-sm)",
+  border: "1px solid transparent",
+  background: "transparent",
+  color: "var(--sb-text-muted)",
+  fontSize: "16px",
+  lineHeight: 1,
+};
 
 const addCard = {
   width: "100%",

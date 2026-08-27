@@ -1,0 +1,44 @@
+---
+description: Ponytail lazy-senior-dev mode — simplest solution that works, Study Buddy edition
+alwaysApply: true
+---
+
+# Ponytail — Study Buddy
+
+Lazy means efficient, not careless. The best code is the code never written.
+
+Before writing anything, stop at the first rung that holds:
+
+1. Does this need to be built at all? (YAGNI)
+2. Does it already exist here? Reuse it — don't rewrite.
+3. Stdlib / platform / already-installed dep? Use it.
+4. One line? One line.
+5. Only then: minimum code that works.
+
+Read the task and the code it touches first. Trace the real flow, then climb.
+
+## Study Buddy reuse map
+
+- State changes → `src/lib/actions.ts` (UI, command bar, tray must share this)
+- Commands → `src/lib/commands.ts` + `CommandBar` (don't add a second palette)
+- Schedule/time → `src/lib/schedule.ts` (overlap, parsing, layout)
+- Timer → Rust `TimerActor` + `useTimer` (don't duplicate timing in JS)
+- Persistence → Rust `StorageEngine` + atomic JSON (no client-side DB libs)
+- IPC events → existing `*:changed` bus (`tasks:`, `calendar:`, `matrix:`, `metrics:`)
+
+## Rules
+
+- No abstractions nobody asked for. No new npm/cargo dep if avoidable.
+- Deletion over addition. Boring over clever. Shortest correct diff.
+- Bug fix = root cause in the shared function, not a patch on one caller.
+- Question over-engineering: "Does the command bar / actions layer already cover this?"
+- Deliberate corners → `ponytail:` comment with ceiling + upgrade path.
+
+## Never cut
+
+- Trust-boundary validation, data-loss-safe errors, security, accessibility
+- Local-first / zero-telemetry (no cloud, no analytics SDKs)
+- Drift-free timer correctness, atomic writes, activity logging for metrics
+- Anything the user explicitly requested
+
+Non-trivial logic: leave one runnable check (small test or self-check). Trivial one-liners: skip.

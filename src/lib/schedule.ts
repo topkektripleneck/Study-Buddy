@@ -1,4 +1,4 @@
-import type { BlockKind, CalendarTimeBlock } from "@/types";
+import type { BlockKind, CalendarTimeBlock, TimeBlockDraft } from "@/types";
 
 export const SCHEDULE_HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
@@ -14,19 +14,24 @@ export const BLOCK_KINDS: { value: BlockKind; label: string; color: string }[] =
   { value: "buffer", label: "Buffer", color: "warm" },
 ];
 
+function hour12(hour: number): { h: number; suffix: "am" | "pm" } {
+  return {
+    h: hour > 12 ? hour - 12 : hour === 0 ? 12 : hour,
+    suffix: hour >= 12 ? "pm" : "am",
+  };
+}
+
 export function formatHourLabel(hour: number): string {
-  const h = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-  const suffix = hour >= 12 ? "pm" : "am";
+  const { h, suffix } = hour12(hour);
   return `${h} ${suffix}`;
 }
 
 export function formatClockLabel(hour: number, minute: number): string {
-  const h = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-  const suffix = hour >= 12 ? "pm" : "am";
+  const { h, suffix } = hour12(hour);
   return `${h}:${minute.toString().padStart(2, "0")} ${suffix}`;
 }
 
-export function blockTimes(
+function blockTimes(
   hour: number,
   minute: number,
   durationMinutes: number,
@@ -38,16 +43,10 @@ export function blockTimes(
   return { startAt: start.toISOString(), endAt: end.toISOString() };
 }
 
-export function createTimeBlock(input: {
-  title: string;
-  hour: number;
-  minute: number;
-  durationMinutes: number;
-  kind: BlockKind;
-  colorToken: string;
-}): CalendarTimeBlock {
+export function createTimeBlock(input: TimeBlockDraft): CalendarTimeBlock {
   const now = new Date().toISOString();
   const { startAt, endAt } = blockTimes(input.hour, input.minute, input.durationMinutes);
+  const colorToken = BLOCK_KINDS.find((k) => k.value === input.kind)?.color ?? "accent";
   return {
     id: crypto.randomUUID(),
     title: input.title.trim(),
@@ -57,7 +56,7 @@ export function createTimeBlock(input: {
     endAt,
     allDay: false,
     kind: input.kind,
-    colorToken: input.colorToken,
+    colorToken,
     notes: null,
     createdAt: now,
     updatedAt: now,
@@ -142,7 +141,6 @@ export function findConflicts(
   });
 }
 
-/** The block covering a given wall-clock time today, if any. */
 export function blockAt(
   blocks: CalendarTimeBlock[],
   time: ClockTime,
@@ -161,12 +159,10 @@ export function blockAt(
   );
 }
 
-/** Vertical offset in pixels for an hour gridline, measured from the top of the timeline. */
 export function hourOffsetPx(hour: number, startHour: number): number {
   return (hour - startHour) * HOUR_ROW_HEIGHT;
 }
 
-/** Vertical offset in pixels for a wall-clock time. */
 export function timeOffsetPx(date: Date, startHour: number): number {
   const minutesFromStart = date.getHours() * 60 + date.getMinutes() - startHour * 60;
   return (minutesFromStart / 60) * HOUR_ROW_HEIGHT;

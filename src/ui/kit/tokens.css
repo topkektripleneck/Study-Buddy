@@ -23,12 +23,23 @@
   --sb-border-subtle: rgba(255, 255, 255, 0.06);
   --sb-border-glow: rgba(110, 231, 255, 0.25);
 
-  /* Motion */
-  --sb-ease-kinetic: cubic-bezier(0.22, 1, 0.36, 1);
-  --sb-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Motion — strong curves (emil-design-eng), critical damping default (apple-design) */
+  --sb-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --sb-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --sb-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --sb-ease-kinetic: var(--sb-ease-out);
+  --sb-duration-press: 140ms;
   --sb-duration-fast: 120ms;
   --sb-duration-normal: 220ms;
+  --sb-duration-modal: 240ms;
   --sb-duration-slow: 380ms;
+
+  /* Materials (apple-design) */
+  --sb-material-bg: rgba(24, 28, 38, 0.72);
+  --sb-material-border: rgba(255, 255, 255, 0.08);
+  --sb-material-blur: 20px;
+  --sb-material-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --sb-scrim: rgba(0, 0, 0, 0.55);
 
   /* Radius & spacing */
   --sb-radius-sm: 6px;
@@ -40,13 +51,18 @@
   --sb-space-lg: 24px;
   --sb-space-xl: 32px;
 
-  /* Typography */
+  /* Typography — optical sizing (apple-design) */
   --sb-font-sans: "Segoe UI", system-ui, -apple-system, sans-serif;
   --sb-font-mono: "Cascadia Code", "Consolas", monospace;
+  --sb-tracking-tight: -0.02em;
+  --sb-tracking-body: 0;
+  --sb-tracking-caps: 0.08em;
 
   font-family: var(--sb-font-sans);
   font-size: 14px;
   line-height: 1.5;
+  letter-spacing: var(--sb-tracking-body);
+  font-optical-sizing: auto;
   color: var(--sb-text-primary);
   background: var(--sb-bg-base);
 }

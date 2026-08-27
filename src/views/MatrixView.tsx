@@ -1,8 +1,8 @@
-import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useListen } from "@/hooks/useListen";
 import { removeFromMatrix, setQuadrant } from "@/lib/actions";
 import { api } from "@/lib/api";
-import { GlowBorder, PressableEnergy, Surface } from "@/ui/kit";
+import { GlowBorder, Surface } from "@/ui/kit";
 import {
   QUADRANT_META,
   type EisenhowerMatrixFile,
@@ -10,17 +10,11 @@ import {
   type TaskItem,
 } from "@/types";
 
-const QUADRANTS: EisenhowerQuadrant[] = [
-  "do_first",
-  "schedule",
-  "delegate",
-  "eliminate",
-];
+const QUADRANTS: EisenhowerQuadrant[] = ["do_first", "schedule", "delegate", "eliminate"];
 
 export function MatrixView() {
   const [matrix, setMatrix] = useState<EisenhowerMatrixFile | null>(null);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [picker, setPicker] = useState<EisenhowerQuadrant | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -36,45 +30,34 @@ export function MatrixView() {
 
   useEffect(() => {
     refresh();
-    const unsubs: (() => void)[] = [];
-    listen("matrix:changed", () => refresh()).then((u) => unsubs.push(u));
-    listen("tasks:changed", () => refresh()).then((u) => unsubs.push(u));
-    return () => unsubs.forEach((u) => u());
   }, [refresh]);
 
-  const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+  useListen(refresh, "matrix:changed", "tasks:changed");
 
+  const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
   const unplaced = useMemo(() => {
     const placed = new Set(matrix?.items.map((i) => i.taskId) ?? []);
-    return tasks.filter(
-      (t) => !placed.has(t.id) && t.status !== "done" && t.status !== "archived",
-    );
+    return tasks.filter((t) => !placed.has(t.id) && t.status !== "done" && t.status !== "archived");
   }, [matrix, tasks]);
 
   async function run(action: () => Promise<{ ok: boolean; message: string }>) {
-    try {
-      const result = await action();
-      if (!result.ok) setError(result.message);
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Action failed");
-    }
+    const result = await action();
+    if (!result.ok) setError(result.message);
+    await refresh();
   }
 
-  if (!matrix) return null;
+  if (!matrix) {
+    if (error) return <p style={errorBanner}>{error}</p>;
+    return null;
+  }
 
   return (
     <div>
       <div style={headerRow}>
         <h2 style={title}>Eisenhower Matrix</h2>
-        <span style={hint}>{unplaced.length} unplaced tasks</span>
+        <span style={hint}>{unplaced.length} unplaced</span>
       </div>
-
-      {error && (
-        <p style={errorBanner} role="alert">
-          {error}
-        </p>
-      )}
+      {error && <p style={errorBanner}>{error}</p>}
 
       <div style={grid}>
         {QUADRANTS.map((quadrant) => {
@@ -96,19 +79,14 @@ export function MatrixView() {
                     if (!item) return null;
                     return (
                       <li key={id} style={card}>
-                        <span style={cardLabel}>{task?.title ?? "Unknown task"}</span>
+                        <span style={cardLabel}>{task?.title ?? "Unknown"}</span>
                         <select
                           style={moveSelect}
                           value={quadrant}
-                          onChange={(e) =>
-                            run(() =>
-                              setQuadrant(
-                                item.taskId,
-                                e.target.value as EisenhowerQuadrant,
-                              ),
-                            )
-                          }
-                          aria-label="Move to quadrant"
+                          onChange={(e) => {
+                            const next = QUADRANTS.find((q) => q === e.target.value);
+                            if (next) run(() => setQuadrant(item.taskId, next));
+                          }}
                         >
                           {QUADRANTS.map((q) => (
                             <option key={q} value={q}>
@@ -116,114 +94,51 @@ export function MatrixView() {
                             </option>
                           ))}
                         </select>
-                        <button
-                          type="button"
-                          style={removeBtn}
-                          onClick={() => run(() => removeFromMatrix(item.id))}
-                          title="Remove from matrix"
-                        >
+                        <button type="button" style={removeBtn} onClick={() => run(() => removeFromMatrix(item.id))}>
                           ×
                         </button>
                       </li>
                     );
                   })}
-                  {ids.length === 0 && <li style={empty}>Nothing here yet</li>}
+                  {ids.length === 0 && <li style={empty}>Nothing here</li>}
                 </ul>
 
-                <button
-                  type="button"
-                  style={addBtn}
-                  onClick={() => setPicker(quadrant)}
-                  disabled={unplaced.length === 0}
-                >
-                  {unplaced.length === 0 ? "No unplaced tasks" : "+ Add task"}
-                </button>
+                {unplaced.length > 0 && (
+                  <select
+                    style={addSelect}
+                    defaultValue=""
+                    onChange={(e) => {
+                      const taskId = e.target.value;
+                      if (!taskId) return;
+                      e.target.value = "";
+                      run(() => setQuadrant(taskId, quadrant));
+                    }}
+                  >
+                    <option value="">+ Add task…</option>
+                    {unplaced.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.title}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </Surface>
             </GlowBorder>
           );
         })}
       </div>
-
-      {picker && (
-        <TaskPicker
-          quadrant={picker}
-          tasks={unplaced}
-          onPick={(taskId) => {
-            setPicker(null);
-            run(() => setQuadrant(taskId, picker));
-          }}
-          onClose={() => setPicker(null)}
-        />
-      )}
     </div>
   );
 }
 
-function TaskPicker({
-  quadrant,
-  tasks,
-  onPick,
-  onClose,
-}: {
-  quadrant: EisenhowerQuadrant;
-  tasks: TaskItem[];
-  onPick: (taskId: string) => void;
-  onClose: () => void;
-}) {
-  return (
-    <div style={overlay} onClick={onClose} role="presentation">
-      <Surface
-        padding="lg"
-        variant="overlay"
-        style={panel}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 style={pickerTitle}>Add to {QUADRANT_META[quadrant].title}</h3>
-        <ul style={pickerList}>
-          {tasks.map((task) => (
-            <li key={task.id}>
-              <button type="button" style={pickerItem} onClick={() => onPick(task.id)}>
-                {task.title}
-              </button>
-            </li>
-          ))}
-        </ul>
-        <PressableEnergy variant="ghost" onClick={onClose}>
-          Cancel
-        </PressableEnergy>
-      </Surface>
-    </div>
-  );
-}
-
-const headerRow = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "baseline",
-  marginBottom: "16px",
-};
+const headerRow = { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "16px" };
 const title = { margin: 0, fontSize: "22px" };
 const hint = { fontSize: "12px", color: "var(--sb-text-muted)" };
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: "var(--sb-space-md)",
-};
+const grid = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sb-space-md)" };
 const quadrantCard = { minHeight: "200px" };
-const header = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-};
-const count = {
-  fontFamily: "var(--sb-font-mono)",
-  color: "var(--sb-accent)",
-};
-const subtitle = {
-  margin: "4px 0 12px",
-  fontSize: "12px",
-  color: "var(--sb-text-muted)",
-};
+const header = { display: "flex", justifyContent: "space-between", alignItems: "center" };
+const count = { fontFamily: "var(--sb-font-mono)", color: "var(--sb-accent)" };
+const subtitle = { margin: "4px 0 12px", fontSize: "12px", color: "var(--sb-text-muted)" };
 const list = { margin: 0, padding: 0, listStyle: "none" };
 const card = {
   display: "flex",
@@ -242,64 +157,10 @@ const moveSelect = {
   border: "1px solid var(--sb-border-subtle)",
   borderRadius: "var(--sb-radius-sm)",
   fontSize: "11px",
-  padding: "2px 4px",
 };
-const removeBtn = {
-  border: "none",
-  background: "transparent",
-  color: "var(--sb-text-muted)",
-  cursor: "pointer",
-  fontSize: "16px",
-  lineHeight: 1,
-};
-const empty = {
-  color: "var(--sb-text-muted)",
-  fontStyle: "italic",
-  padding: "8px 0",
-};
-const addBtn = {
-  marginTop: "10px",
-  width: "100%",
-  padding: "6px",
-  borderRadius: "var(--sb-radius-sm)",
-  border: "1px dashed var(--sb-border-subtle)",
-  background: "transparent",
-  color: "var(--sb-text-muted)",
-  cursor: "pointer",
-  font: "inherit",
-  fontSize: "12px",
-};
-const overlay = {
-  position: "fixed" as const,
-  inset: 0,
-  background: "rgba(0,0,0,0.55)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  zIndex: 100,
-};
-const panel = { width: "min(420px, 92vw)" };
-const pickerTitle = { margin: "0 0 12px", fontSize: "16px" };
-const pickerList = {
-  margin: "0 0 12px",
-  padding: 0,
-  listStyle: "none",
-  maxHeight: "300px",
-  overflowY: "auto" as const,
-};
-const pickerItem = {
-  width: "100%",
-  textAlign: "left" as const,
-  padding: "8px 10px",
-  marginBottom: "4px",
-  borderRadius: "var(--sb-radius-sm)",
-  border: "1px solid var(--sb-border-subtle)",
-  background: "var(--sb-bg-base)",
-  color: "var(--sb-text-primary)",
-  cursor: "pointer",
-  font: "inherit",
-  fontSize: "13px",
-};
+const removeBtn = { border: "none", background: "transparent", color: "var(--sb-text-muted)", cursor: "pointer", fontSize: "16px" };
+const empty = { color: "var(--sb-text-muted)", fontStyle: "italic", padding: "8px 0" };
+const addSelect = { marginTop: "10px", width: "100%", fontSize: "12px", padding: "6px", borderRadius: "var(--sb-radius-sm)" };
 const errorBanner = {
   margin: "0 0 12px",
   padding: "8px 12px",

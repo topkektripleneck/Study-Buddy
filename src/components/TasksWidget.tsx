@@ -1,5 +1,5 @@
-import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useListen } from "@/hooks/useListen";
 import { createTask, deleteTask, toggleTaskDone } from "@/lib/actions";
 import { api } from "@/lib/api";
 import { PressableEnergy, Surface } from "@/ui/kit";
@@ -22,11 +22,9 @@ export function TasksWidget() {
 
   useEffect(() => {
     refresh();
-    const unlisten = listen("tasks:changed", () => refresh());
-    return () => {
-      unlisten.then((u) => u());
-    };
   }, [refresh]);
+
+  useListen(refresh, "tasks:changed");
 
   const { open, done } = useMemo(
     () => ({
@@ -39,13 +37,9 @@ export function TasksWidget() {
   const visible = showDone ? [...open, ...done] : open;
 
   async function run(action: () => Promise<{ ok: boolean; message: string }>) {
-    try {
-      const result = await action();
-      if (!result.ok) setError(result.message);
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Action failed");
-    }
+    const result = await action();
+    if (!result.ok) setError(result.message);
+    await refresh();
   }
 
   return (
@@ -61,7 +55,8 @@ export function TasksWidget() {
 
       <div style={row}>
         <input
-          style={input}
+          className="sb-input"
+          style={{ flex: 1, padding: "8px 12px" }}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="New task..."
@@ -131,14 +126,6 @@ const headerRow = {
 const title = { margin: 0, fontSize: "16px" };
 const counts = { fontSize: "11px", color: "var(--sb-text-muted)" };
 const row = { display: "flex", gap: "8px", marginBottom: "12px" };
-const input = {
-  flex: 1,
-  padding: "8px 12px",
-  borderRadius: "var(--sb-radius-sm)",
-  border: "1px solid var(--sb-border-subtle)",
-  background: "var(--sb-bg-base)",
-  color: "var(--sb-text-primary)",
-};
 const list = {
   margin: 0,
   padding: 0,

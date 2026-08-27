@@ -30,7 +30,6 @@ impl WindowManager {
         }
     }
 
-    /// Returns the new open state.
     pub fn toggle(app: &AppHandle, label: &str) -> Result<bool, AppError> {
         if Self::is_open(app, label) {
             Self::close(app, label)?;

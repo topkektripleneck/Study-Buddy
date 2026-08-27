@@ -1,0 +1,124 @@
+/* Shared interaction patterns — apple-design + emil-design-eng */
+
+/* Press feedback: respond on pointer-down, not release */
+.sb-pressable {
+  transition:
+    transform var(--sb-duration-press) var(--sb-ease-out),
+    box-shadow var(--sb-duration-fast) var(--sb-ease-out),
+    background var(--sb-duration-fast) var(--sb-ease-out),
+    border-color var(--sb-duration-fast) var(--sb-ease-out),
+    color var(--sb-duration-fast) var(--sb-ease-out);
+}
+
+.sb-pressable:active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sb-pressable-hover:hover {
+    border-color: var(--sb-border-glow);
+    color: var(--sb-text-primary);
+  }
+}
+
+/* Translucent floating chrome (Apple materials) */
+.sb-glass {
+  background: var(--sb-material-bg);
+  backdrop-filter: blur(var(--sb-material-blur)) saturate(180%);
+  border: 1px solid var(--sb-material-border);
+  box-shadow: var(--sb-material-shadow);
+}
+
+/* Modal: dim to focus, materialize panel (occasional — may animate) */
+.sb-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  background: var(--sb-scrim);
+  animation: sb-backdrop-in var(--sb-duration-modal) var(--sb-ease-out) both;
+}
+
+.sb-modal-panel {
+  transform-origin: center center;
+  animation: sb-modal-in var(--sb-duration-modal) var(--sb-ease-out) both;
+}
+
+@keyframes sb-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sb-modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Form controls — shared field chrome */
+.sb-input {
+  padding: 8px 10px;
+  border-radius: var(--sb-radius-sm);
+  border: 1px solid var(--sb-border-subtle);
+  background: var(--sb-bg-base);
+  color: var(--sb-text-primary);
+  font: inherit;
+}
+
+.sb-input-narrow {
+  width: 64px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* Command bar: keyboard-initiated — no enter/exit motion (Emil) */
+.sb-command-panel {
+  transform-origin: bottom center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sb-pressable {
+    transition: opacity var(--sb-duration-fast) ease;
+  }
+
+  .sb-pressable:active {
+    transform: none;
+    opacity: 0.88;
+  }
+
+  .sb-modal-backdrop,
+  .sb-modal-panel {
+    animation: none;
+  }
+
+  .sb-glass {
+    backdrop-filter: none;
+    background: var(--sb-bg-overlay);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .sb-glass {
+    backdrop-filter: none;
+    background: var(--sb-bg-overlay);
+  }
+}
+
+@media (prefers-contrast: more) {
+  .sb-glass {
+    backdrop-filter: none;
+    background: var(--sb-bg-raised);
+    border-color: var(--sb-text-secondary);
+  }
+}

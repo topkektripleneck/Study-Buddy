@@ -24,20 +24,11 @@ export function useTimer() {
       const channel = new Channel<TimerTickPayload>();
       channel.onmessage = (msg) => setTick(msg);
       await api.timerSubscribe(channel);
-
-      const unlisten = await listen<TimerTickPayload>("timer:tick", (event) => {
-        setTick(event.payload);
-      });
-
-      return () => {
-        unlisten();
-      };
     }
 
-    const cleanup = init();
+    init();
     return () => {
       cancelled = true;
-      cleanup.then((fn) => fn?.());
     };
   }, []);
 
@@ -47,25 +38,12 @@ export function useTimer() {
       : formatMs(tick.remainingMs ?? tick.elapsedMs)
     : "25:00";
 
-  const isRunning = tick?.runState === "running";
-  const isPaused = tick?.runState === "paused";
-  const isIdle = !tick || tick.runState === "idle";
-
   return {
     tick,
     displayTime,
-    isRunning,
-    isPaused,
-    isIdle,
-    start: useCallback(
-      (protocol?: string, durationMinutes?: number) =>
-        api.timerStart(protocol, durationMinutes),
-      [],
-    ),
-    pause: useCallback(() => api.timerPause(), []),
-    resume: useCallback(() => api.timerResume(), []),
-    reset: useCallback(() => api.timerReset(), []),
-    skipPhase: useCallback(() => api.timerSkipPhase(), []),
+    isRunning: tick?.runState === "running",
+    isPaused: tick?.runState === "paused",
+    isIdle: !tick || tick.runState === "idle",
   };
 }
 
