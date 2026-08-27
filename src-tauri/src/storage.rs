@@ -1,7 +1,6 @@
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
 use serde::de::DeserializeOwned;
@@ -255,13 +254,6 @@ fn default_layout() -> WidgetLayout {
         schema_version: SCHEMA_VERSION,
         widget_ids: vec!["focus".to_string(), "clock".to_string()],
     }
-}
-
-pub fn mono_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
 }
 
 #[cfg(test)]

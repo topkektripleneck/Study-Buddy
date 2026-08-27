@@ -6,6 +6,7 @@ import { PressableEnergy, Surface } from "@/ui/kit";
 export interface TimeBlockDraft {
   title: string;
   hour: number;
+  minute: number;
   durationMinutes: number;
   kind: BlockKind;
   colorToken: string;
@@ -13,17 +14,22 @@ export interface TimeBlockDraft {
 
 interface AddTimeBlockModalProps {
   initialHour: number;
+  initialMinute?: number;
   onSave: (draft: TimeBlockDraft) => void;
   onClose: () => void;
 }
 
+const MINUTES = [0, 15, 30, 45];
+
 export function AddTimeBlockModal({
   initialHour,
+  initialMinute = 0,
   onSave,
   onClose,
 }: AddTimeBlockModalProps) {
   const [title, setTitle] = useState("");
   const [hour, setHour] = useState(initialHour);
+  const [minute, setMinute] = useState(initialMinute);
   const [durationMinutes, setDurationMinutes] = useState(60);
   const [kind, setKind] = useState<BlockKind>("focus");
   const [colorToken, setColorToken] = useState("accent");
@@ -31,7 +37,7 @@ export function AddTimeBlockModal({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    onSave({ title, hour, durationMinutes, kind, colorToken });
+    onSave({ title, hour, minute, durationMinutes, kind, colorToken });
   }
 
   return (
@@ -59,7 +65,7 @@ export function AddTimeBlockModal({
 
           <div style={row}>
             <label style={label}>
-              Start
+              Start hour
               <select
                 style={input}
                 value={hour}
@@ -68,6 +74,20 @@ export function AddTimeBlockModal({
                 {Array.from({ length: 13 }, (_, i) => i + 8).map((h) => (
                   <option key={h} value={h}>
                     {formatHourLabel(h)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={label}>
+              Minute
+              <select
+                style={input}
+                value={minute}
+                onChange={(e) => setMinute(Number(e.target.value))}
+              >
+                {MINUTES.map((m) => (
+                  <option key={m} value={m}>
+                    :{m.toString().padStart(2, "0")}
                   </option>
                 ))}
               </select>
@@ -140,5 +160,5 @@ const input = {
   color: "var(--sb-text-primary)",
   font: "inherit",
 };
-const row = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" };
+const row = { display: "grid", gridTemplateColumns: "1.2fr 0.8fr 1fr", gap: "10px" };
 const actions = { display: "flex", gap: "8px", marginTop: "8px" };

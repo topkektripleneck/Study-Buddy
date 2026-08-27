@@ -11,7 +11,39 @@ use crate::windows::WindowManager;
 
 #[tauri::command]
 pub fn window_open(app: tauri::AppHandle, label: String) -> Result<(), String> {
-    WindowManager::open(&app, &label).map_err(|e| e.to_string())
+    WindowManager::open(&app, &label).map_err(|e| e.to_string())?;
+    emit_window_visibility(&app, &label, true);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn window_close(app: tauri::AppHandle, label: String) -> Result<(), String> {
+    WindowManager::close(&app, &label).map_err(|e| e.to_string())?;
+    emit_window_visibility(&app, &label, false);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn window_is_open(app: tauri::AppHandle, label: String) -> Result<bool, String> {
+    Ok(WindowManager::is_open(&app, &label))
+}
+
+#[tauri::command]
+pub fn window_toggle(app: tauri::AppHandle, label: String) -> Result<bool, String> {
+    toggle_window_from_tray(&app, &label).map_err(|e| e.to_string())
+}
+
+pub fn toggle_window_from_tray(app: &tauri::AppHandle, label: &str) -> Result<bool, AppError> {
+    let open = WindowManager::toggle(app, label)?;
+    emit_window_visibility(app, label, open);
+    Ok(open)
+}
+
+fn emit_window_visibility(app: &tauri::AppHandle, label: &str, open: bool) {
+    let _ = app.emit(
+        "window:visibility",
+        serde_json::json!({ "label": label, "open": open }),
+    );
 }
 
 #[tauri::command]
@@ -214,8 +246,12 @@ pub fn timer_get(state: State<AppState>) -> Result<Option<TimerTickPayload>, Str
 pub fn timer_start(
     state: State<AppState>,
     protocol: Option<String>,
+    duration_minutes: Option<u32>,
 ) -> Result<TimerTickPayload, String> {
-    state.timer.start(protocol).map_err(|e| e.to_string())
+    state
+        .timer
+        .start(protocol, duration_minutes)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

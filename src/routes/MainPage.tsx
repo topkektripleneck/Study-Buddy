@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { useWindowOpen } from "@/hooks/useWindowOpen";
 import { KineticStack, PressableEnergy } from "@/ui/kit";
 import { MatrixView } from "@/views/MatrixView";
 import { ScheduleView } from "@/views/ScheduleView";
 import { WidgetsView } from "@/views/WidgetsView";
-import { openWindow } from "@/lib/windows";
 import type { MainTab } from "@/types";
 
 const TABS: { id: MainTab; label: string }[] = [
@@ -16,6 +16,8 @@ const TABS: { id: MainTab; label: string }[] = [
 export function MainPage() {
   const [tab, setTab] = useState<MainTab>("widgets");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const calendarWindow = useWindowOpen("calendar");
+  const hudWindow = useWindowOpen("hud");
 
   return (
     <div style={page}>
@@ -42,11 +44,11 @@ export function MainPage() {
           <PressableEnergy variant="ghost" onClick={() => setSettingsOpen(true)}>
             Settings
           </PressableEnergy>
-          <PressableEnergy variant="ghost" onClick={() => openWindow("calendar")}>
-            Open Calendar Window
+          <PressableEnergy variant="ghost" onClick={() => calendarWindow.toggle()}>
+            {calendarWindow.open ? "Close Calendar Window" : "Open Calendar Window"}
           </PressableEnergy>
-          <PressableEnergy variant="ghost" onClick={() => openWindow("hud")}>
-            Open HUD
+          <PressableEnergy variant="ghost" onClick={() => hudWindow.toggle()}>
+            {hudWindow.open ? "Remove HUD" : "Add HUD"}
           </PressableEnergy>
         </KineticStack>
       </header>

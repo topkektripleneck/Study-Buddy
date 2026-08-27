@@ -1,21 +1,28 @@
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use parking_lot::Mutex;
-use tauri::{AppHandle, Emitter};
 use tauri::ipc::Channel;
+use tauri::{AppHandle, Emitter};
 
 use crate::error::AppError;
 use crate::models::{
-    parse_iso, AppConfig, Discontinuity, TimerPhase, TimerRunState, TimerSession, TimerTickPayload,
-    now_iso, new_uuid,
+    new_uuid, now_iso, parse_iso, AppConfig, Discontinuity, TimerPhase, TimerRunState, TimerSession,
+    TimerTickPayload,
 };
-use crate::storage::{mono_ms, StorageEngine};
+use crate::storage::StorageEngine;
 
 static SUBSCRIBER_ID: AtomicU64 = AtomicU64::new(1);
+static MONO_START: OnceLock<Instant> = OnceLock::new();
+
+/// Milliseconds since process start on a monotonic clock. Only meaningful within
+/// one run of the process, so restored sessions must be re-anchored.
+pub fn mono_ms() -> u64 {
+    MONO_START.get_or_init(Instant::now).elapsed().as_millis() as u64
+}
 
 struct Subscriber {
     id: u64,
@@ -37,11 +44,16 @@ struct TimerInner {
 
 impl TimerActor {
     pub fn new(storage: Arc<StorageEngine>, app: AppHandle, config: AppConfig) -> Arc<Self> {
+        let mut restored = storage.read_session().ok().flatten();
+        if let Some(session) = restored.as_mut() {
+            session.anchor_mono_ms = mono_ms();
+        }
+
         let actor = Arc::new(Self {
             storage: storage.clone(),
             app: app.clone(),
             inner: Mutex::new(TimerInner {
-                session: storage.read_session().ok().flatten(),
+                session: restored,
                 config,
             }),
             subscribers: Mutex::new(vec![]),
@@ -57,20 +69,24 @@ impl TimerActor {
     pub fn subscribe(&self, channel: Channel<TimerTickPayload>) {
         let id = SUBSCRIBER_ID.fetch_add(1, Ordering::Relaxed);
         self.subscribers.lock().push(Subscriber { id, channel });
-        if let Some(tick) = self.compute_tick(None) {
+        if let Some(tick) = self.compute_tick(false) {
             let _ = self.push_tick(&tick);
         }
     }
 
     pub fn get_tick(&self) -> Option<TimerTickPayload> {
-        self.compute_tick(None)
+        self.compute_tick(false)
     }
 
     pub fn app(&self) -> &AppHandle {
         &self.app
     }
 
-    pub fn start(&self, protocol: Option<String>) -> Result<TimerTickPayload, AppError> {
+    pub fn start(
+        &self,
+        protocol: Option<String>,
+        duration_minutes: Option<u32>,
+    ) -> Result<TimerTickPayload, AppError> {
         let mut inner = self.inner.lock();
         let config = inner.config.clone();
         let protocol = protocol.unwrap_or_else(|| "pomodoro".to_string());
@@ -79,7 +95,17 @@ impl TimerActor {
         } else {
             TimerPhase::Focus
         };
-        let duration = phase_duration(&config, phase);
+
+        let custom_focus_ms = match duration_minutes {
+            Some(m) if m == 0 => return Err(AppError::InvalidInput("duration must be > 0".into())),
+            Some(m) => Some(m as u64 * 60_000),
+            None => None,
+        };
+
+        let duration = match phase {
+            TimerPhase::Focus => custom_focus_ms.or_else(|| phase_duration(&config, phase, None)),
+            _ => phase_duration(&config, phase, None),
+        };
 
         let session = TimerSession {
             session_id: new_uuid(),
@@ -93,13 +119,15 @@ impl TimerActor {
             phase_index: 0,
             cycle_length: config.pomodoro_cycle_length,
             protocol,
+            custom_focus_ms,
         };
 
         inner.session = Some(session.clone());
         drop(inner);
         self.persist_session()?;
         self.emit_phase(None, session.phase);
-        self.compute_tick(None).ok_or_else(|| AppError::Timer("no tick".into()))
+        self.compute_tick(false)
+            .ok_or_else(|| AppError::Timer("no tick".into()))
     }
 
     pub fn pause(&self) -> Result<TimerTickPayload, AppError> {
@@ -115,7 +143,8 @@ impl TimerActor {
         session.paused_at = Some(now_iso());
         drop(inner);
         self.persist_session()?;
-        self.compute_tick(None).ok_or_else(|| AppError::Timer("no tick".into()))
+        self.compute_tick(false)
+            .ok_or_else(|| AppError::Timer("no tick".into()))
     }
 
     pub fn resume(&self) -> Result<TimerTickPayload, AppError> {
@@ -129,15 +158,15 @@ impl TimerActor {
         }
         if let Some(paused_at) = session.paused_at.take() {
             if let Ok(paused) = parse_iso(&paused_at) {
-                let now = Utc::now();
-                let pause_ms = (now - paused).num_milliseconds().max(0) as u64;
+                let pause_ms = (Utc::now() - paused).num_milliseconds().max(0) as u64;
                 session.accumulated_pause_ms += pause_ms;
             }
         }
         session.run_state = TimerRunState::Running;
         drop(inner);
         self.persist_session()?;
-        self.compute_tick(None).ok_or_else(|| AppError::Timer("no tick".into()))
+        self.compute_tick(false)
+            .ok_or_else(|| AppError::Timer("no tick".into()))
     }
 
     pub fn reset(&self) -> Result<(), AppError> {
@@ -154,19 +183,27 @@ impl TimerActor {
             .session
             .as_mut()
             .ok_or_else(|| AppError::Timer("no active session".into()))?;
+
         let from = session.phase;
         let next = next_phase(&config, session);
+        let custom_focus_ms = session.custom_focus_ms;
+
         session.phase = next;
         session.phase_index += 1;
         session.run_state = TimerRunState::Running;
+        // Re-anchor: elapsed time is measured from the start of the current phase.
+        session.anchor_at = now_iso();
+        session.anchor_mono_ms = mono_ms();
         session.accumulated_pause_ms = 0;
         session.paused_at = None;
-        session.phase_duration_ms = phase_duration(&config, session.phase);
+        session.phase_duration_ms = phase_duration(&config, next, custom_focus_ms);
         let to = session.phase;
+
         drop(inner);
         self.persist_session()?;
         self.emit_phase(Some(from), to);
-        self.compute_tick(None).ok_or_else(|| AppError::Timer("no tick".into()))
+        self.compute_tick(false)
+            .ok_or_else(|| AppError::Timer("no tick".into()))
     }
 
     pub fn update_config(&self, config: AppConfig) {
@@ -176,7 +213,7 @@ impl TimerActor {
     fn tick_loop(self: Arc<Self>) {
         loop {
             thread::sleep(Duration::from_millis(200));
-            if let Some(tick) = self.compute_tick(Some(200)) {
+            if let Some(tick) = self.compute_tick(true) {
                 let _ = self.push_tick(&tick);
                 self.maybe_checkpoint();
                 self.check_phase_completion(&tick);
@@ -193,65 +230,41 @@ impl TimerActor {
     }
 
     fn check_phase_completion(&self, tick: &TimerTickPayload) {
-        if tick.run_state != TimerRunState::Running {
+        if tick.run_state != TimerRunState::Running || tick.phase == TimerPhase::Stopwatch {
             return;
         }
-        if tick.phase == TimerPhase::Stopwatch {
-            return;
-        }
-        if let (Some(remaining), Some(_)) = (tick.remaining_ms, tick.phase_duration_ms) {
-            if remaining == 0 {
-                let _ = self.skip_phase();
-            }
+        if let Some(0) = tick.remaining_ms {
+            let _ = self.skip_phase();
         }
     }
 
-    fn compute_tick(&self, mono_delta_hint: Option<u64>) -> Option<TimerTickPayload> {
+    fn compute_tick(&self, detect_discontinuity: bool) -> Option<TimerTickPayload> {
         let inner = self.inner.lock();
         let session = inner.session.as_ref()?;
+        let anchor = parse_iso(&session.anchor_at).ok()?;
 
         let mut discontinuity = Discontinuity::None;
-        if session.run_state == TimerRunState::Running {
-            if let Ok(anchor) = parse_iso(&session.anchor_at) {
+
+        let elapsed_ms = match session.run_state {
+            TimerRunState::Running => {
                 let wall_ms = (Utc::now() - anchor).num_milliseconds().max(0) as u64;
-                let mono_ms_now = mono_ms();
-                let mono_delta = mono_ms_now.saturating_sub(session.anchor_mono_ms);
-                if mono_delta_hint.is_some() {
-                    let diff = (wall_ms as i64 - mono_delta as i64).unsigned_abs();
-                    if diff > 2000 {
+                if detect_discontinuity {
+                    let mono_delta = mono_ms().saturating_sub(session.anchor_mono_ms);
+                    let drift = (wall_ms as i64 - mono_delta as i64).unsigned_abs();
+                    if drift > 2_000 {
                         discontinuity = Discontinuity::SystemSuspend;
                     }
                 }
-                let elapsed_ms = wall_ms.saturating_sub(session.accumulated_pause_ms);
-                let remaining_ms = session.phase_duration_ms.map(|d| d.saturating_sub(elapsed_ms));
-
-                return Some(TimerTickPayload {
-                    session_id: session.session_id.clone(),
-                    phase: session.phase,
-                    run_state: session.run_state,
-                    anchor_at: session.anchor_at.clone(),
-                    elapsed_ms,
-                    remaining_ms,
-                    phase_duration_ms: session.phase_duration_ms,
-                    phase_index: session.phase_index,
-                    cycle_length: session.cycle_length,
-                    discontinuity,
-                });
+                wall_ms.saturating_sub(session.accumulated_pause_ms)
             }
-        }
-
-        let elapsed_ms = if session.run_state == TimerRunState::Paused {
-            session
+            TimerRunState::Paused => session
                 .paused_at
                 .as_ref()
                 .and_then(|p| parse_iso(p).ok())
-                .and_then(|paused| parse_iso(&session.anchor_at).ok().map(|anchor| {
-                    (paused - anchor).num_milliseconds().max(0) as u64
-                }))
+                .map(|paused| (paused - anchor).num_milliseconds().max(0) as u64)
                 .unwrap_or(0)
-                .saturating_sub(session.accumulated_pause_ms)
-        } else {
-            0
+                .saturating_sub(session.accumulated_pause_ms),
+            TimerRunState::Idle | TimerRunState::Completed => 0,
         };
 
         Some(TimerTickPayload {
@@ -260,7 +273,9 @@ impl TimerActor {
             run_state: session.run_state,
             anchor_at: session.anchor_at.clone(),
             elapsed_ms,
-            remaining_ms: session.phase_duration_ms.map(|d| d.saturating_sub(elapsed_ms)),
+            remaining_ms: session
+                .phase_duration_ms
+                .map(|d| d.saturating_sub(elapsed_ms)),
             phase_duration_ms: session.phase_duration_ms,
             phase_index: session.phase_index,
             cycle_length: session.cycle_length,
@@ -293,22 +308,21 @@ impl TimerActor {
 
     fn persist_session(&self) -> Result<(), AppError> {
         let session = self.inner.lock().session.clone();
-        if let Some(s) = session {
-            self.storage.write_session(&s)?;
-        } else {
-            self.storage.clear_session()?;
+        match session {
+            Some(s) => self.storage.write_session(&s),
+            None => self.storage.clear_session(),
         }
-        Ok(())
     }
 
     fn emit_phase(&self, from: Option<TimerPhase>, to: TimerPhase) {
-        let session_id = self
-            .inner
-            .lock()
-            .session
-            .as_ref()
-            .map(|s| s.session_id.clone())
-            .unwrap_or_default();
+        let (session_id, duration_ms) = {
+            let inner = self.inner.lock();
+            match inner.session.as_ref() {
+                Some(s) => (s.session_id.clone(), s.phase_duration_ms),
+                None => (String::new(), None),
+            }
+        };
+
         let _ = self.app.emit(
             "timer:phase",
             serde_json::json!({
@@ -316,15 +330,25 @@ impl TimerActor {
                 "from": from,
                 "to": to,
                 "at": now_iso(),
+                "phaseDurationMs": duration_ms,
                 "autoStarted": true
             }),
         );
     }
 }
 
-fn phase_duration(config: &AppConfig, phase: TimerPhase) -> Option<u64> {
+fn phase_duration(
+    config: &AppConfig,
+    phase: TimerPhase,
+    custom_focus_ms: Option<u64>,
+) -> Option<u64> {
     let minutes = match phase {
-        TimerPhase::Focus => config.pomodoro_focus_minutes,
+        TimerPhase::Focus => {
+            if let Some(ms) = custom_focus_ms {
+                return Some(ms);
+            }
+            config.pomodoro_focus_minutes
+        }
         TimerPhase::ShortBreak => config.pomodoro_short_break_minutes,
         TimerPhase::LongBreak => config.pomodoro_long_break_minutes,
         TimerPhase::Stopwatch | TimerPhase::Idle => return None,
@@ -335,7 +359,8 @@ fn phase_duration(config: &AppConfig, phase: TimerPhase) -> Option<u64> {
 fn next_phase(config: &AppConfig, session: &TimerSession) -> TimerPhase {
     match session.phase {
         TimerPhase::Focus => {
-            if (session.phase_index + 1) % config.pomodoro_cycle_length == 0 {
+            let cycle = config.pomodoro_cycle_length.max(1);
+            if (session.phase_index + 1) % cycle == 0 {
                 TimerPhase::LongBreak
             } else {
                 TimerPhase::ShortBreak

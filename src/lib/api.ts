@@ -35,8 +35,8 @@ export const api = {
   layoutSave: (layout: WidgetLayout) => invoke<void>("layout_save", { layout }),
 
   timerGet: () => invoke<TimerTickPayload | null>("timer_get"),
-  timerStart: (protocol?: string) =>
-    invoke<TimerTickPayload>("timer_start", { protocol }),
+  timerStart: (protocol?: string, durationMinutes?: number) =>
+    invoke<TimerTickPayload>("timer_start", { protocol, durationMinutes }),
   timerPause: () => invoke<TimerTickPayload>("timer_pause"),
   timerResume: () => invoke<TimerTickPayload>("timer_resume"),
   timerReset: () => invoke<void>("timer_reset"),

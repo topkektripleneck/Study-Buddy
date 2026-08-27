@@ -65,10 +65,10 @@ pub fn run() {
                         let _ = windows::WindowManager::focus(app, "main");
                     }
                     "toggle_hud" => {
-                        let _ = windows::WindowManager::open(app, "hud");
+                        let _ = commands::toggle_window_from_tray(app, "hud");
                     }
                     "toggle_calendar" => {
-                        let _ = windows::WindowManager::open(app, "calendar");
+                        let _ = commands::toggle_window_from_tray(app, "calendar");
                     }
                     "quit" => {
                         app.exit(0);
@@ -84,6 +84,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::window_open,
+            commands::window_close,
+            commands::window_is_open,
+            commands::window_toggle,
             commands::storage_get_data_dir,
             commands::tasks_list,
             commands::task_create,

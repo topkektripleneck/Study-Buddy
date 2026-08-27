@@ -2,13 +2,19 @@ import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AddTimeBlockModal, type TimeBlockDraft } from "@/components/AddTimeBlockModal";
 import { TaskPromptModal } from "@/components/TaskPromptModal";
+import { useNow } from "@/hooks/useNow";
 import { api } from "@/lib/api";
 import {
+  HOUR_ROW_HEIGHT,
   SCHEDULE_HOURS,
-  blockLayout,
+  blockLayoutPx,
   createTimeBlock,
+  formatClockLabel,
   formatHourLabel,
+  hourOffsetPx,
   isSameLocalDay,
+  timeOffsetPx,
+  timelineHeightPx,
 } from "@/lib/schedule";
 import { PressableEnergy, Surface } from "@/ui/kit";
 import type { AppConfig, CalendarTimeBlock, TaskItem } from "@/types";
@@ -20,20 +26,25 @@ const COLOR_MAP: Record<string, string> = {
   admin: "#a78bfa",
 };
 
+interface SlotTarget {
+  hour: number;
+  minute: number;
+}
+
 export function ScheduleView() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [blocks, setBlocks] = useState<CalendarTimeBlock[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [modalHour, setModalHour] = useState<number | null>(null);
+  const [slot, setSlot] = useState<SlotTarget | null>(null);
   const [pendingTaskBlock, setPendingTaskBlock] = useState<CalendarTimeBlock | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const now = new Date();
+  const now = useNow(15_000);
   const startHour = SCHEDULE_HOURS[0];
   const endHour = SCHEDULE_HOURS[SCHEDULE_HOURS.length - 1] + 1;
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const rangeMinutes = (endHour - startHour) * 60;
-  const nowTop = ((nowMinutes - startHour * 60) / rangeMinutes) * 100;
+  const timelineHeight = timelineHeightPx(startHour, endHour);
+  const nowTop = timeOffsetPx(now, startHour);
+  const nowVisible = nowTop >= 0 && nowTop <= timelineHeight;
 
   const refresh = useCallback(async () => {
     try {
@@ -63,19 +74,27 @@ export function ScheduleView() {
   const todayBlocks = useMemo(
     () =>
       blocks
-        .filter((b) => isSameLocalDay(b.startAt, now))
+        .filter((b) => isSameLocalDay(b.startAt))
         .sort((a, b) => a.startAt.localeCompare(b.startAt)),
-    [blocks, now],
+    [blocks],
   );
 
   const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+
+  /** Converts a click inside an hour row into an hour + quarter-hour target. */
+  function slotFromClick(hour: number, event: React.MouseEvent<HTMLButtonElement>): SlotTarget {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const ratio = (event.clientY - bounds.top) / bounds.height;
+    const minute = Math.min(45, Math.max(0, Math.round((ratio * 60) / 15) * 15));
+    return { hour, minute };
+  }
 
   async function saveBlock(draft: TimeBlockDraft) {
     try {
       const block = createTimeBlock(draft);
       const saved = await api.calendarSaveBlock(block);
       setBlocks((prev) => [...prev, saved]);
-      setModalHour(null);
+      setSlot(null);
 
       const shouldPrompt = config?.promptTaskOnBlockCreate ?? true;
       if (shouldPrompt) {
@@ -147,9 +166,11 @@ export function ScheduleView() {
             ) : (
               todayBlocks.map((block, i) => {
                 const linked = block.taskId ? taskById.get(block.taskId) : null;
+                const start = new Date(block.startAt);
                 return (
                   <li key={block.id} style={blockItem}>
-                    <strong>Block {i + 1}</strong> — {block.title}
+                    <strong>Block {i + 1}</strong> —{" "}
+                    {formatClockLabel(start.getHours(), start.getMinutes())} · {block.title}
                     {linked && <span style={linkedTag}> · task linked</span>}
                   </li>
                 );
@@ -162,7 +183,14 @@ export function ScheduleView() {
           <div style={timelineHeader}>
             <h3 style={heading}>Scheduler</h3>
             <div style={headerActions}>
-              <PressableEnergy onClick={() => setModalHour(now.getHours())}>
+              <PressableEnergy
+                onClick={() =>
+                  setSlot({
+                    hour: now.getHours(),
+                    minute: Math.floor(now.getMinutes() / 15) * 15,
+                  })
+                }
+              >
                 + Add time block
               </PressableEnergy>
               <label style={toggle}>
@@ -180,36 +208,38 @@ export function ScheduleView() {
             </div>
           </div>
 
-          <div style={timeline}>
+          <div style={{ ...timeline, height: `${timelineHeight}px` }}>
             {SCHEDULE_HOURS.map((h) => (
               <button
                 key={h}
                 type="button"
-                style={hourRow}
-                onClick={() => setModalHour(h)}
+                style={{ ...hourRow, top: `${hourOffsetPx(h, startHour)}px` }}
+                onClick={(e) => setSlot(slotFromClick(h, e))}
                 title={`Add block at ${formatHourLabel(h)}`}
               >
                 <span style={hourLabel}>{formatHourLabel(h)}</span>
-                <div style={hourLine} />
+                <span style={hourLine} />
               </button>
             ))}
 
-            {nowTop >= 0 && nowTop <= 100 && (
-              <div style={{ ...nowLine, top: `${nowTop}%` }}>
-                <span style={nowArrow}>▶</span>
+            {nowVisible && (
+              <div style={{ ...nowLine, top: `${nowTop}px` }}>
+                <span style={nowBadge}>
+                  {formatClockLabel(now.getHours(), now.getMinutes())}
+                </span>
               </div>
             )}
 
             {todayBlocks.map((block) => {
-              const { top, height } = blockLayout(block, startHour, endHour);
+              const { top, height } = blockLayoutPx(block, startHour);
               const colored = config?.coloredTimeBlocks ?? true;
               return (
                 <div
                   key={block.id}
                   style={{
                     ...eventBlock,
-                    top: `${top}%`,
-                    height: `${height}%`,
+                    top: `${top}px`,
+                    height: `${height}px`,
                     background: colored
                       ? COLOR_MAP[block.colorToken] ?? "var(--sb-accent-dim)"
                       : "var(--sb-bg-overlay)",
@@ -235,11 +265,12 @@ export function ScheduleView() {
         </Surface>
       </div>
 
-      {modalHour !== null && (
+      {slot && (
         <AddTimeBlockModal
-          initialHour={modalHour}
+          initialHour={slot.hour}
+          initialMinute={slot.minute}
           onSave={saveBlock}
-          onClose={() => setModalHour(null)}
+          onClose={() => setSlot(null)}
         />
       )}
 
@@ -262,6 +293,7 @@ const sidebar = {
   background: "var(--sb-bg-raised)",
   borderRadius: "var(--sb-radius-md)",
   border: "1px solid var(--sb-border-subtle)",
+  alignSelf: "start" as const,
 };
 
 const sidebarHeader = {
@@ -312,24 +344,24 @@ const toggle = {
 };
 const timeline = {
   position: "relative" as const,
-  minHeight: "440px",
   paddingLeft: "56px",
+  marginBottom: "8px",
 };
 const hourRow = {
+  position: "absolute" as const,
+  left: 0,
+  right: 0,
+  height: `${HOUR_ROW_HEIGHT}px`,
   display: "flex",
-  alignItems: "center",
-  height: "48px",
-  position: "relative" as const,
-  width: "100%",
+  alignItems: "flex-start",
   border: "none",
   background: "transparent",
   cursor: "pointer",
   padding: 0,
 };
 const hourLabel = {
-  position: "absolute" as const,
-  left: "-52px",
   width: "48px",
+  marginTop: "-7px",
   fontSize: "12px",
   color: "var(--sb-text-muted)",
   textAlign: "right" as const,
@@ -337,28 +369,32 @@ const hourLabel = {
 };
 const hourLine = {
   flex: 1,
+  marginLeft: "8px",
   borderTop: "1px solid var(--sb-border-subtle)",
 };
 const nowLine = {
   position: "absolute" as const,
-  left: "0",
-  right: "0",
+  left: "56px",
+  right: 0,
   height: "2px",
   background: "var(--sb-accent)",
   zIndex: 2,
   boxShadow: "0 0 8px var(--sb-glow-accent)",
   pointerEvents: "none" as const,
 };
-const nowArrow = {
+const nowBadge = {
   position: "absolute" as const,
-  left: "-16px",
+  left: "-56px",
   top: "-8px",
+  width: "52px",
+  textAlign: "right" as const,
+  fontSize: "11px",
+  fontWeight: 600,
   color: "var(--sb-accent)",
-  fontSize: "12px",
 };
 const eventBlock = {
   position: "absolute" as const,
-  left: "56px",
+  left: "64px",
   right: "8px",
   borderRadius: "var(--sb-radius-sm)",
   padding: "4px 24px 4px 8px",

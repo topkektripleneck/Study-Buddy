@@ -2,6 +2,9 @@ import type { BlockKind, CalendarTimeBlock } from "@/types";
 
 export const SCHEDULE_HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
+/** Pixel height of one hour row. All timeline geometry is derived from this. */
+export const HOUR_ROW_HEIGHT = 48;
+
 export const BLOCK_KINDS: { value: BlockKind; label: string; color: string }[] = [
   { value: "focus", label: "Focus", color: "accent" },
   { value: "break", label: "Break", color: "success" },
@@ -17,13 +20,20 @@ export function formatHourLabel(hour: number): string {
   return `${h} ${suffix}`;
 }
 
-export function blockTimesFromHour(
+export function formatClockLabel(hour: number, minute: number): string {
+  const h = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+  const suffix = hour >= 12 ? "pm" : "am";
+  return `${h}:${minute.toString().padStart(2, "0")} ${suffix}`;
+}
+
+export function blockTimes(
   hour: number,
+  minute: number,
   durationMinutes: number,
   date = new Date(),
 ): { startAt: string; endAt: string } {
   const start = new Date(date);
-  start.setHours(hour, 0, 0, 0);
+  start.setHours(hour, minute, 0, 0);
   const end = new Date(start.getTime() + durationMinutes * 60_000);
   return { startAt: start.toISOString(), endAt: end.toISOString() };
 }
@@ -31,12 +41,13 @@ export function blockTimesFromHour(
 export function createTimeBlock(input: {
   title: string;
   hour: number;
+  minute: number;
   durationMinutes: number;
   kind: BlockKind;
   colorToken: string;
 }): CalendarTimeBlock {
   const now = new Date().toISOString();
-  const { startAt, endAt } = blockTimesFromHour(input.hour, input.durationMinutes);
+  const { startAt, endAt } = blockTimes(input.hour, input.minute, input.durationMinutes);
   return {
     id: crypto.randomUUID(),
     title: input.title.trim(),
@@ -57,16 +68,30 @@ export function isSameLocalDay(iso: string, date = new Date()): boolean {
   return new Date(iso).toDateString() === date.toDateString();
 }
 
-export function blockLayout(
+/** Vertical offset in pixels for an hour gridline, measured from the top of the timeline. */
+export function hourOffsetPx(hour: number, startHour: number): number {
+  return (hour - startHour) * HOUR_ROW_HEIGHT;
+}
+
+/** Vertical offset in pixels for a wall-clock time. */
+export function timeOffsetPx(date: Date, startHour: number): number {
+  const minutesFromStart = date.getHours() * 60 + date.getMinutes() - startHour * 60;
+  return (minutesFromStart / 60) * HOUR_ROW_HEIGHT;
+}
+
+export function timelineHeightPx(startHour: number, endHour: number): number {
+  return (endHour - startHour) * HOUR_ROW_HEIGHT;
+}
+
+export function blockLayoutPx(
   block: CalendarTimeBlock,
   startHour: number,
-  endHour: number,
 ): { top: number; height: number } {
   const start = new Date(block.startAt);
   const end = new Date(block.endAt);
-  const rangeMinutes = (endHour - startHour) * 60;
-  const top =
-    ((start.getHours() * 60 + start.getMinutes() - startHour * 60) / rangeMinutes) * 100;
-  const height = ((end.getTime() - start.getTime()) / 60_000 / rangeMinutes) * 100;
-  return { top, height: Math.max(height, 4) };
+  const durationMinutes = (end.getTime() - start.getTime()) / 60_000;
+  return {
+    top: timeOffsetPx(start, startHour),
+    height: Math.max((durationMinutes / 60) * HOUR_ROW_HEIGHT, 18),
+  };
 }

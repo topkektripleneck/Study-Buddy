@@ -219,6 +219,9 @@ pub struct TimerSession {
     pub phase_index: u32,
     pub cycle_length: u32,
     pub protocol: String,
+    /// Overrides the configured focus length for this session only.
+    #[serde(default)]
+    pub custom_focus_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

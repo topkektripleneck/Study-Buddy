@@ -57,7 +57,11 @@ export function useTimer() {
     isRunning,
     isPaused,
     isIdle,
-    start: useCallback((protocol?: string) => api.timerStart(protocol), []),
+    start: useCallback(
+      (protocol?: string, durationMinutes?: number) =>
+        api.timerStart(protocol, durationMinutes),
+      [],
+    ),
     pause: useCallback(() => api.timerPause(), []),
     resume: useCallback(() => api.timerResume(), []),
     reset: useCallback(() => api.timerReset(), []),

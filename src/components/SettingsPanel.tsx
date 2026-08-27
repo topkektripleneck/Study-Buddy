@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useWindowOpen } from "@/hooks/useWindowOpen";
 import { api } from "@/lib/api";
 import type { AppConfig } from "@/types";
 import { PressableEnergy, Surface } from "@/ui/kit";
@@ -10,6 +11,7 @@ interface SettingsPanelProps {
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [saved, setSaved] = useState(false);
+  const hud = useWindowOpen("hud");
 
   useEffect(() => {
     api.configGet().then(setConfig);
@@ -54,14 +56,21 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           />
         </label>
 
-        <label style={row}>
-          <span>Auto-show HUD when focus session starts</span>
-          <input
-            type="checkbox"
-            checked={config.hudAutoShowOnSessionStart}
-            onChange={(e) => update({ hudAutoShowOnSessionStart: e.target.checked })}
-          />
-        </label>
+        <div style={section}>
+          <p style={sectionTitle}>HUD</p>
+          <label style={row}>
+            <span>Show the floating HUD window</span>
+            <input type="checkbox" checked={hud.open} onChange={() => hud.toggle()} />
+          </label>
+          <label style={row}>
+            <span>Auto-show HUD when a session starts</span>
+            <input
+              type="checkbox"
+              checked={config.hudAutoShowOnSessionStart}
+              onChange={(e) => update({ hudAutoShowOnSessionStart: e.target.checked })}
+            />
+          </label>
+        </div>
 
         <div style={section}>
           <p style={sectionTitle}>Pomodoro</p>
@@ -75,6 +84,41 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               onChange={(e) =>
                 update({ pomodoroFocusMinutes: Number(e.target.value) })
               }
+            />
+          </label>
+          <label style={row}>
+            <span>Short break (minutes)</span>
+            <input
+              type="number"
+              min={1}
+              style={numInput}
+              value={config.pomodoroShortBreakMinutes}
+              onChange={(e) =>
+                update({ pomodoroShortBreakMinutes: Number(e.target.value) })
+              }
+            />
+          </label>
+          <label style={row}>
+            <span>Long break (minutes)</span>
+            <input
+              type="number"
+              min={1}
+              style={numInput}
+              value={config.pomodoroLongBreakMinutes}
+              onChange={(e) =>
+                update({ pomodoroLongBreakMinutes: Number(e.target.value) })
+              }
+            />
+          </label>
+          <label style={row}>
+            <span>Focus blocks before a long break</span>
+            <input
+              type="number"
+              min={1}
+              max={12}
+              style={numInput}
+              value={config.pomodoroCycleLength}
+              onChange={(e) => update({ pomodoroCycleLength: Number(e.target.value) })}
             />
           </label>
         </div>
