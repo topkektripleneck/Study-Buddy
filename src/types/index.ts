@@ -91,6 +91,24 @@ export interface CalendarTimeBlock {
   updatedAt: Iso8601;
 }
 
+export type ActivityKind = "focus" | "stopwatch";
+
+export interface ActivityLogRecord {
+  id: Uuid;
+  kind: ActivityKind;
+  startedAt: Iso8601;
+  endedAt: Iso8601;
+  durationMs: number;
+  ranToCompletion: boolean;
+  localDate: string;
+}
+
+export interface DailyFocus {
+  date: string;
+  focusMs: number;
+  metTarget: boolean;
+}
+
 export interface ConsistencyMetric {
   schemaVersion: number;
   dailyTargetMinutes: number;

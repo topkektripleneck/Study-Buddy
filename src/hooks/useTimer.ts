@@ -78,8 +78,15 @@ export function useMetrics() {
 
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 30_000);
-    return () => clearInterval(id);
+    const id = setInterval(refresh, 60_000);
+    const unlisten = listen<ConsistencyMetric>("metrics:changed", (event) => {
+      setMetrics(event.payload);
+    });
+
+    return () => {
+      clearInterval(id);
+      unlisten.then((u) => u());
+    };
   }, [refresh]);
 
   return { metrics, refresh };

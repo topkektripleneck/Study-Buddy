@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { CommandBar } from "@/components/CommandBar";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { useWindowOpen } from "@/hooks/useWindowOpen";
+import { onNavigate } from "@/lib/actions";
 import { KineticStack, PressableEnergy } from "@/ui/kit";
 import { MatrixView } from "@/views/MatrixView";
 import { ScheduleView } from "@/views/ScheduleView";
@@ -18,6 +20,8 @@ export function MainPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const calendarWindow = useWindowOpen("calendar");
   const hudWindow = useWindowOpen("hud");
+
+  useEffect(() => onNavigate(setTab), []);
 
   return (
     <div style={page}>
@@ -60,6 +64,8 @@ export function MainPage() {
       </main>
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+
+      <CommandBar />
     </div>
   );
 }
@@ -114,4 +120,6 @@ const tabActive = {
 
 const content = {
   minHeight: "480px",
+  // Leaves room for the docked command bar.
+  paddingBottom: "96px",
 };

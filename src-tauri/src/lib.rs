@@ -1,5 +1,6 @@
 mod commands;
 mod error;
+mod metrics;
 mod models;
 mod state;
 mod storage;
@@ -37,6 +38,12 @@ pub fn run() {
             let config = storage
                 .read_config()
                 .map_err(|e| e.to_string())?;
+
+            let _ = storage.maybe_daily_backup();
+            // Recompute on launch so a day rollover resets today's numbers even
+            // if the app was left running across midnight.
+            let _ = metrics::recalculate(&storage);
+
             let timer = TimerActor::new(storage.clone(), app.handle().clone(), config);
 
             app.manage(AppState {
@@ -88,15 +95,22 @@ pub fn run() {
             commands::window_is_open,
             commands::window_toggle,
             commands::storage_get_data_dir,
+            commands::storage_open_data_dir,
             commands::tasks_list,
             commands::task_create,
             commands::task_update,
+            commands::task_toggle_done,
+            commands::task_delete,
             commands::matrix_get,
             commands::matrix_save,
+            commands::matrix_set_quadrant,
+            commands::matrix_remove_item,
             commands::calendar_list,
             commands::calendar_save_block,
             commands::calendar_delete_block,
             commands::metrics_get,
+            commands::metrics_recalculate,
+            commands::activity_daily_totals,
             commands::config_get,
             commands::config_save,
             commands::layout_get,

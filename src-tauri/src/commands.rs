@@ -1,10 +1,12 @@
 use tauri::Emitter;
 use tauri::State;
+use tauri_plugin_opener::OpenerExt;
 
 use crate::error::AppError;
 use crate::models::{
-    AppConfig, CalendarTimeBlock, ConsistencyMetric, EisenhowerMatrixFile, TaskItem,
-    TimerTickPayload, WidgetLayout, new_uuid, now_iso,
+    AppConfig, CalendarTimeBlock, ConsistencyMetric, DailyFocus, EisenhowerMatrixFile,
+    EisenhowerQuadrant, EisenhowerQuadrantItem, TaskItem, TaskStatus, TimerTickPayload,
+    WidgetLayout, new_uuid, now_iso,
 };
 use crate::state::AppState;
 use crate::windows::WindowManager;
@@ -53,6 +55,14 @@ pub fn storage_get_data_dir(state: State<AppState>) -> Result<String, String> {
         .root()
         .to_string_lossy()
         .to_string())
+}
+
+#[tauri::command]
+pub fn storage_open_data_dir(app: tauri::AppHandle, state: State<AppState>) -> Result<(), String> {
+    let path = state.storage.root().to_string_lossy().to_string();
+    app.opener()
+        .open_path(path, None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -114,6 +124,105 @@ pub fn task_update(state: State<AppState>, task: TaskItem) -> Result<TaskItem, S
 }
 
 #[tauri::command]
+pub fn task_toggle_done(state: State<AppState>, task_id: String) -> Result<TaskItem, String> {
+    let mut tasks = state.storage.read_tasks().map_err(|e| e.to_string())?;
+    let task = tasks
+        .iter_mut()
+        .find(|t| t.id == task_id)
+        .ok_or_else(|| AppError::NotFound(task_id.clone()).to_string())?;
+
+    if task.status == TaskStatus::Done {
+        task.status = TaskStatus::Open;
+        task.completed_at = None;
+    } else {
+        task.status = TaskStatus::Done;
+        task.completed_at = Some(now_iso());
+    }
+    task.updated_at = now_iso();
+    let updated = task.clone();
+
+    state.storage.write_tasks(&tasks).map_err(|e| e.to_string())?;
+    let rev = state.bump_revision();
+    let _ = state.timer.app().emit(
+        "tasks:changed",
+        serde_json::json!({ "kind": "updated", "taskIds": [updated.id.clone()], "revision": rev }),
+    );
+    Ok(updated)
+}
+
+/// Removes a task along with its subtasks, its matrix placement, and any
+/// references to it from calendar blocks.
+#[tauri::command]
+pub fn task_delete(state: State<AppState>, task_id: String) -> Result<(), String> {
+    let mut tasks = state.storage.read_tasks().map_err(|e| e.to_string())?;
+    if !tasks.iter().any(|t| t.id == task_id) {
+        return Err(AppError::NotFound(task_id.clone()).to_string());
+    }
+
+    let doomed: Vec<String> = tasks
+        .iter()
+        .filter(|t| t.id == task_id || t.parent_id.as_deref() == Some(task_id.as_str()))
+        .map(|t| t.id.clone())
+        .collect();
+    tasks.retain(|t| !doomed.contains(&t.id));
+    state.storage.write_tasks(&tasks).map_err(|e| e.to_string())?;
+
+    let mut blocks = state.storage.read_calendar().map_err(|e| e.to_string())?;
+    let mut blocks_changed = false;
+    for block in &mut blocks {
+        if block.task_id.as_ref().is_some_and(|id| doomed.contains(id)) {
+            block.task_id = None;
+            block.updated_at = now_iso();
+            blocks_changed = true;
+        }
+    }
+    if blocks_changed {
+        state
+            .storage
+            .write_calendar(&blocks)
+            .map_err(|e| e.to_string())?;
+    }
+
+    let mut matrix = state.storage.read_matrix().map_err(|e| e.to_string())?;
+    let orphans: Vec<String> = matrix
+        .items
+        .iter()
+        .filter(|item| doomed.contains(&item.task_id))
+        .map(|item| item.id.clone())
+        .collect();
+    if !orphans.is_empty() {
+        matrix.items.retain(|item| !orphans.contains(&item.id));
+        for id in &orphans {
+            matrix.quadrant_order.remove_everywhere(id);
+        }
+        state
+            .storage
+            .write_matrix(&matrix)
+            .map_err(|e| e.to_string())?;
+    }
+
+    let rev = state.bump_revision();
+    let app = state.timer.app();
+    let _ = app.emit(
+        "tasks:changed",
+        serde_json::json!({ "kind": "deleted", "taskIds": doomed, "revision": rev }),
+    );
+    if blocks_changed {
+        let _ = app.emit(
+            "calendar:changed",
+            serde_json::json!({ "kind": "updated", "revision": rev }),
+        );
+    }
+    if !orphans.is_empty() {
+        let _ = app.emit(
+            "matrix:changed",
+            serde_json::json!({ "kind": "updated", "revision": rev }),
+        );
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub fn matrix_get(state: State<AppState>) -> Result<EisenhowerMatrixFile, String> {
     state.storage.read_matrix().map_err(|e| e.to_string())
 }
@@ -127,6 +236,133 @@ pub fn matrix_save(state: State<AppState>, matrix: EisenhowerMatrixFile) -> Resu
         serde_json::json!({ "kind": "updated", "revision": rev }),
     );
     Ok(())
+}
+
+/// Places a task in a quadrant, moving it if it is already placed elsewhere.
+#[tauri::command]
+pub fn matrix_set_quadrant(
+    state: State<AppState>,
+    task_id: String,
+    quadrant: EisenhowerQuadrant,
+) -> Result<EisenhowerMatrixFile, String> {
+    let mut tasks = state.storage.read_tasks().map_err(|e| e.to_string())?;
+    let task = tasks
+        .iter_mut()
+        .find(|t| t.id == task_id)
+        .ok_or_else(|| AppError::NotFound(task_id.clone()).to_string())?;
+    task.quadrant = Some(quadrant);
+    task.updated_at = now_iso();
+
+    let mut matrix = state.storage.read_matrix().map_err(|e| e.to_string())?;
+    let item_id = match matrix.items.iter_mut().find(|i| i.task_id == task_id) {
+        Some(existing) => {
+            existing.quadrant = quadrant;
+            existing.entered_quadrant_at = now_iso();
+            existing.id.clone()
+        }
+        None => {
+            let item = EisenhowerQuadrantItem {
+                id: new_uuid(),
+                task_id: task_id.clone(),
+                quadrant,
+                order: 0,
+                urgency: String::new(),
+                importance: String::new(),
+                delegate_to: None,
+                elimination_reason: None,
+                staged_for_calendar: false,
+                entered_quadrant_at: now_iso(),
+            };
+            let id = item.id.clone();
+            matrix.items.push(item);
+            id
+        }
+    };
+
+    matrix.quadrant_order.remove_everywhere(&item_id);
+    matrix.quadrant_order.list_mut(quadrant).push(item_id);
+    reindex_order(&mut matrix);
+
+    state.storage.write_tasks(&tasks).map_err(|e| e.to_string())?;
+    state
+        .storage
+        .write_matrix(&matrix)
+        .map_err(|e| e.to_string())?;
+
+    let rev = state.bump_revision();
+    let app = state.timer.app();
+    let _ = app.emit(
+        "matrix:changed",
+        serde_json::json!({ "kind": "updated", "revision": rev }),
+    );
+    let _ = app.emit(
+        "tasks:changed",
+        serde_json::json!({ "kind": "updated", "taskIds": [task_id], "revision": rev }),
+    );
+    Ok(matrix)
+}
+
+#[tauri::command]
+pub fn matrix_remove_item(
+    state: State<AppState>,
+    item_id: String,
+) -> Result<EisenhowerMatrixFile, String> {
+    let mut matrix = state.storage.read_matrix().map_err(|e| e.to_string())?;
+    let task_id = matrix
+        .items
+        .iter()
+        .find(|i| i.id == item_id)
+        .map(|i| i.task_id.clone())
+        .ok_or_else(|| AppError::NotFound(item_id.clone()).to_string())?;
+
+    matrix.items.retain(|i| i.id != item_id);
+    matrix.quadrant_order.remove_everywhere(&item_id);
+    reindex_order(&mut matrix);
+
+    let mut tasks = state.storage.read_tasks().map_err(|e| e.to_string())?;
+    if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
+        task.quadrant = None;
+        task.updated_at = now_iso();
+        state.storage.write_tasks(&tasks).map_err(|e| e.to_string())?;
+    }
+    state
+        .storage
+        .write_matrix(&matrix)
+        .map_err(|e| e.to_string())?;
+
+    let rev = state.bump_revision();
+    let app = state.timer.app();
+    let _ = app.emit(
+        "matrix:changed",
+        serde_json::json!({ "kind": "updated", "revision": rev }),
+    );
+    let _ = app.emit(
+        "tasks:changed",
+        serde_json::json!({ "kind": "updated", "taskIds": [task_id], "revision": rev }),
+    );
+    Ok(matrix)
+}
+
+fn reindex_order(matrix: &mut EisenhowerMatrixFile) {
+    let positions: Vec<(String, i32)> = [
+        &matrix.quadrant_order.do_first,
+        &matrix.quadrant_order.schedule,
+        &matrix.quadrant_order.delegate,
+        &matrix.quadrant_order.eliminate,
+    ]
+    .iter()
+    .flat_map(|list| {
+        list.iter()
+            .enumerate()
+            .map(|(index, id)| (id.clone(), index as i32))
+    })
+    .collect();
+
+    for (id, index) in positions {
+        if let Some(item) = matrix.items.iter_mut().find(|i| i.id == id) {
+            item.order = index;
+        }
+    }
 }
 
 #[tauri::command]
@@ -196,6 +432,24 @@ pub fn calendar_delete_block(state: State<AppState>, block_id: String) -> Result
 #[tauri::command]
 pub fn metrics_get(state: State<AppState>) -> Result<ConsistencyMetric, String> {
     state.storage.read_metrics().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn metrics_recalculate(state: State<AppState>) -> Result<ConsistencyMetric, String> {
+    crate::metrics::recalculate(&state.storage).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn activity_daily_totals(
+    state: State<AppState>,
+    days: u32,
+) -> Result<Vec<DailyFocus>, String> {
+    let target = state
+        .storage
+        .read_metrics()
+        .map(|m| m.daily_target_minutes)
+        .unwrap_or(120);
+    Ok(state.storage.daily_focus_totals(days, target))
 }
 
 #[tauri::command]

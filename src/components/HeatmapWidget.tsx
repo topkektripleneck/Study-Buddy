@@ -1,31 +1,63 @@
-import { Surface } from "@/ui/kit";
+import { listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useState } from "react";
 import { useMetrics } from "@/hooks/useTimer";
+import { api } from "@/lib/api";
+import { Surface } from "@/ui/kit";
+import type { DailyFocus } from "@/types";
+
+const DAYS = 28;
 
 export function HeatmapWidget() {
   const { metrics } = useMetrics();
-  const cells = Array.from({ length: 28 }, (_, i) => {
-    const intensity = (i * 7) % 5;
-    return intensity;
-  });
+  const [days, setDays] = useState<DailyFocus[]>([]);
+
+  const refresh = useCallback(async () => {
+    try {
+      setDays(await api.activityDailyTotals(DAYS));
+    } catch {
+      setDays([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const unlisten = listen("metrics:changed", () => refresh());
+    return () => {
+      unlisten.then((u) => u());
+    };
+  }, [refresh]);
+
+  const targetMs = (metrics?.dailyTargetMinutes ?? 120) * 60_000;
 
   return (
     <Surface padding="md">
       <h3 style={title}>Activity</h3>
       <div style={grid}>
-        {cells.map((level, i) => (
-          <div
-            key={i}
-            style={{
-              ...cell,
-              opacity: 0.2 + level * 0.18,
-              background: "var(--sb-accent)",
-            }}
-          />
-        ))}
+        {days.map((day) => {
+          const ratio = targetMs > 0 ? Math.min(day.focusMs / targetMs, 1) : 0;
+          const minutes = Math.round(day.focusMs / 60_000);
+          return (
+            <div
+              key={day.date}
+              title={`${day.date} · ${minutes} min`}
+              style={{
+                ...cell,
+                background: ratio > 0 ? "var(--sb-accent)" : "var(--sb-bg-base)",
+                opacity: ratio > 0 ? 0.25 + ratio * 0.75 : 1,
+                border: day.metTarget ? "1px solid var(--sb-border-glow)" : "1px solid transparent",
+              }}
+            />
+          );
+        })}
+        {days.length === 0 &&
+          Array.from({ length: DAYS }, (_, i) => (
+            <div key={i} style={{ ...cell, background: "var(--sb-bg-base)" }} />
+          ))}
       </div>
       <p style={meta}>
         Streak: {metrics?.currentStreakDays ?? 0}d · Today:{" "}
-        {metrics?.todayCompletionPercent ?? 0}%
+        {metrics?.todayCompletionPercent ?? 0}% of{" "}
+        {metrics?.dailyTargetMinutes ?? 120}m
       </p>
     </Surface>
   );

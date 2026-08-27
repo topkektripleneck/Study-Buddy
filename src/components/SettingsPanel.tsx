@@ -123,6 +123,16 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           </label>
         </div>
 
+        <div style={section}>
+          <p style={sectionTitle}>Data</p>
+          <p style={dataNote}>
+            Everything lives in local JSON files. A snapshot is taken once a day.
+          </p>
+          <PressableEnergy variant="ghost" onClick={() => api.openDataDir()}>
+            Open data folder
+          </PressableEnergy>
+        </div>
+
         <PressableEnergy variant="ghost" onClick={onClose}>
           Close
         </PressableEnergy>
@@ -159,6 +169,12 @@ const sectionTitle = {
   textTransform: "uppercase" as const,
   letterSpacing: "0.08em",
   color: "var(--sb-text-muted)",
+};
+const dataNote = {
+  margin: "0 0 10px",
+  fontSize: "12px",
+  color: "var(--sb-text-muted)",
+  lineHeight: 1.5,
 };
 const numInput = {
   width: "64px",

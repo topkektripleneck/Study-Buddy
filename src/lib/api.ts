@@ -3,7 +3,9 @@ import type {
   AppConfig,
   CalendarTimeBlock,
   ConsistencyMetric,
+  DailyFocus,
   EisenhowerMatrixFile,
+  EisenhowerQuadrant,
   TaskItem,
   TimerTickPayload,
   WidgetLayout,
@@ -11,14 +13,22 @@ import type {
 
 export const api = {
   getDataDir: () => invoke<string>("storage_get_data_dir"),
+  openDataDir: () => invoke<void>("storage_open_data_dir"),
 
   tasksList: () => invoke<TaskItem[]>("tasks_list"),
   taskCreate: (title: string) => invoke<TaskItem>("task_create", { title }),
   taskUpdate: (task: TaskItem) => invoke<TaskItem>("task_update", { task }),
+  taskToggleDone: (taskId: string) =>
+    invoke<TaskItem>("task_toggle_done", { taskId }),
+  taskDelete: (taskId: string) => invoke<void>("task_delete", { taskId }),
 
   matrixGet: () => invoke<EisenhowerMatrixFile>("matrix_get"),
   matrixSave: (matrix: EisenhowerMatrixFile) =>
     invoke<void>("matrix_save", { matrix }),
+  matrixSetQuadrant: (taskId: string, quadrant: EisenhowerQuadrant) =>
+    invoke<EisenhowerMatrixFile>("matrix_set_quadrant", { taskId, quadrant }),
+  matrixRemoveItem: (itemId: string) =>
+    invoke<EisenhowerMatrixFile>("matrix_remove_item", { itemId }),
 
   calendarList: () => invoke<CalendarTimeBlock[]>("calendar_list"),
   calendarSaveBlock: (block: CalendarTimeBlock) =>
@@ -27,6 +37,9 @@ export const api = {
     invoke<void>("calendar_delete_block", { blockId }),
 
   metricsGet: () => invoke<ConsistencyMetric>("metrics_get"),
+  metricsRecalculate: () => invoke<ConsistencyMetric>("metrics_recalculate"),
+  activityDailyTotals: (days: number) =>
+    invoke<DailyFocus[]>("activity_daily_totals", { days }),
 
   configGet: () => invoke<AppConfig>("config_get"),
   configSave: (config: AppConfig) => invoke<AppConfig>("config_save", { config }),

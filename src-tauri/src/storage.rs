@@ -2,14 +2,14 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use chrono::Utc;
+use chrono::{Duration, Local, Utc};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::error::AppError;
 use crate::models::{
-    AppConfig, CalendarTimeBlock, ConsistencyMetric, EisenhowerMatrixFile, SchemaFile,
-    TaskItem, TimerSession, WidgetLayout,
+    ActivityLogRecord, AppConfig, CalendarTimeBlock, ConsistencyMetric, DailyFocus,
+    EisenhowerMatrixFile, SchemaFile, TaskItem, TimerSession, WidgetLayout,
 };
 
 const SCHEMA_VERSION: u32 = 1;
@@ -93,8 +93,26 @@ impl StorageEngine {
         Ok(())
     }
 
+    /// Takes at most one snapshot per local day. Returns whether one was written.
+    pub fn maybe_daily_backup(&self) -> Result<bool, AppError> {
+        let today = Local::now().format("%Y-%m-%d").to_string();
+        let already_done = fs::read_dir(self.root.join("backups"))
+            .map(|entries| {
+                entries
+                    .flatten()
+                    .any(|e| e.file_name().to_string_lossy().starts_with(&today))
+            })
+            .unwrap_or(false);
+
+        if already_done {
+            return Ok(false);
+        }
+        self.backup_snapshot()?;
+        Ok(true)
+    }
+
     pub fn backup_snapshot(&self) -> Result<(), AppError> {
-        let stamp = Utc::now().format("%Y-%m-%dT%H-%M-%S").to_string();
+        let stamp = Local::now().format("%Y-%m-%dT%H-%M-%S").to_string();
         let backup_dir = self.root.join("backups").join(stamp);
         fs::create_dir_all(&backup_dir)
             .map_err(|e| AppError::Storage(format!("backup dir: {e}")))?;
@@ -168,6 +186,59 @@ impl StorageEngine {
         self.write_atomic("metrics.json", metrics)
     }
 
+    pub fn append_activity(&self, record: &ActivityLogRecord) -> Result<(), AppError> {
+        let rel = activity_file_for(&record.local_date);
+        let mut records = self.read_activity_month(&rel);
+        records.push(record.clone());
+        self.write_atomic(&rel, &records)
+    }
+
+    fn read_activity_month(&self, rel: &str) -> Vec<ActivityLogRecord> {
+        self.read_json(rel).unwrap_or_default()
+    }
+
+    /// Focus totals per local day for the last `days` days, oldest first.
+    /// Days with no recorded activity are included with a zero total.
+    pub fn daily_focus_totals(
+        &self,
+        days: u32,
+        daily_target_minutes: u32,
+    ) -> Vec<DailyFocus> {
+        let today = Local::now().date_naive();
+        let span = days.max(1) as i64;
+        let first = today - Duration::days(span - 1);
+
+        let mut months: Vec<String> = vec![];
+        let mut cursor = first;
+        while cursor <= today {
+            let key = cursor.format("%Y-%m").to_string();
+            if !months.contains(&key) {
+                months.push(key);
+            }
+            cursor += Duration::days(1);
+        }
+
+        let mut totals: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+        for month in months {
+            for record in self.read_activity_month(&format!("activity/{month}.json")) {
+                *totals.entry(record.local_date.clone()).or_insert(0) += record.duration_ms;
+            }
+        }
+
+        let target_ms = daily_target_minutes as u64 * 60_000;
+        (0..span)
+            .map(|offset| {
+                let date = (first + Duration::days(offset)).format("%Y-%m-%d").to_string();
+                let focus_ms = totals.get(&date).copied().unwrap_or(0);
+                DailyFocus {
+                    met_target: target_ms > 0 && focus_ms >= target_ms,
+                    date,
+                    focus_ms,
+                }
+            })
+            .collect()
+    }
+
     pub fn read_config(&self) -> Result<AppConfig, AppError> {
         self.read_json("config.json")
     }
@@ -203,6 +274,11 @@ impl StorageEngine {
         }
         Ok(())
     }
+}
+
+fn activity_file_for(local_date: &str) -> String {
+    let month = local_date.get(..7).unwrap_or(local_date);
+    format!("activity/{month}.json")
 }
 
 fn default_schema() -> SchemaFile {

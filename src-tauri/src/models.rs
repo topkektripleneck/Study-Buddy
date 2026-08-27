@@ -107,6 +107,28 @@ impl Default for QuadrantOrder {
     }
 }
 
+impl QuadrantOrder {
+    pub fn list_mut(&mut self, quadrant: EisenhowerQuadrant) -> &mut Vec<Uuid> {
+        match quadrant {
+            EisenhowerQuadrant::DoFirst => &mut self.do_first,
+            EisenhowerQuadrant::Schedule => &mut self.schedule,
+            EisenhowerQuadrant::Delegate => &mut self.delegate,
+            EisenhowerQuadrant::Eliminate => &mut self.eliminate,
+        }
+    }
+
+    pub fn remove_everywhere(&mut self, item_id: &str) {
+        for list in [
+            &mut self.do_first,
+            &mut self.schedule,
+            &mut self.delegate,
+            &mut self.eliminate,
+        ] {
+            list.retain(|id| id != item_id);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum BlockKind {
@@ -133,6 +155,37 @@ pub struct CalendarTimeBlock {
     pub notes: Option<String>,
     pub created_at: Iso8601,
     pub updated_at: Iso8601,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ActivityKind {
+    Focus,
+    Stopwatch,
+}
+
+/// One completed (or abandoned) work interval. Appended to `activity/YYYY-MM.json`
+/// and used to derive every consistency metric.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityLogRecord {
+    pub id: Uuid,
+    pub kind: ActivityKind,
+    pub started_at: Iso8601,
+    pub ended_at: Iso8601,
+    pub duration_ms: u64,
+    /// True when the phase ran its full configured length rather than being cut short.
+    pub ran_to_completion: bool,
+    /// Local calendar day (YYYY-MM-DD) the interval started on.
+    pub local_date: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyFocus {
+    pub date: String,
+    pub focus_ms: u64,
+    pub met_target: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

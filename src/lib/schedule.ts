@@ -68,6 +68,99 @@ export function isSameLocalDay(iso: string, date = new Date()): boolean {
   return new Date(iso).toDateString() === date.toDateString();
 }
 
+export interface ClockTime {
+  hour: number;
+  minute: number;
+}
+
+/**
+ * Parses a loose time token: "13:30", "1:30pm", "1pm", "9", "0930".
+ * Bare numbers below 8 are read as afternoon, matching how people say "meet at 2".
+ */
+export function parseTimeToken(raw: string): ClockTime | null {
+  const token = raw.trim().toLowerCase().replace(/\s+/g, "");
+  if (!token) return null;
+
+  const match = token.match(/^(\d{1,2})(?::?(\d{2}))?(am|pm)?$/);
+  if (!match) return null;
+
+  let hour = Number(match[1]);
+  const minute = match[2] ? Number(match[2]) : 0;
+  const suffix = match[3];
+
+  if (minute > 59) return null;
+  if (suffix === "pm" && hour < 12) hour += 12;
+  if (suffix === "am" && hour === 12) hour = 0;
+  if (!suffix && hour < 8) hour += 12;
+  if (hour > 23) return null;
+
+  return { hour, minute };
+}
+
+/** Parses "1:30-2:30pm" into two clock times. A pm/am suffix carries backwards. */
+export function parseTimeRange(raw: string): { start: ClockTime; end: ClockTime } | null {
+  const [left, right] = raw.split(/[-–—]|to/).map((part) => part?.trim());
+  if (!left || !right) return null;
+
+  const end = parseTimeToken(right);
+  if (!end) return null;
+
+  const suffix = right.trim().toLowerCase().match(/(am|pm)$/)?.[1];
+  const hasOwnSuffix = /(am|pm)$/i.test(left.trim());
+  const start = parseTimeToken(suffix && !hasOwnSuffix ? `${left}${suffix}` : left);
+  if (!start) return null;
+
+  return { start, end };
+}
+
+export function endTimeFrom(start: ClockTime, durationMinutes: number): ClockTime {
+  const total = Math.min(start.hour * 60 + start.minute + durationMinutes, 24 * 60 - 1);
+  return { hour: Math.floor(total / 60), minute: total % 60 };
+}
+
+export function minutesBetween(start: ClockTime, end: ClockTime): number {
+  const startMinutes = start.hour * 60 + start.minute;
+  const endMinutes = end.hour * 60 + end.minute;
+  return endMinutes - startMinutes;
+}
+
+/** Blocks whose time range overlaps [startAt, endAt). Touching edges do not count. */
+export function findConflicts(
+  blocks: CalendarTimeBlock[],
+  startAt: string,
+  endAt: string,
+  excludeId?: string,
+): CalendarTimeBlock[] {
+  const start = new Date(startAt).getTime();
+  const end = new Date(endAt).getTime();
+
+  return blocks.filter((block) => {
+    if (block.id === excludeId) return false;
+    const blockStart = new Date(block.startAt).getTime();
+    const blockEnd = new Date(block.endAt).getTime();
+    return blockStart < end && blockEnd > start;
+  });
+}
+
+/** The block covering a given wall-clock time today, if any. */
+export function blockAt(
+  blocks: CalendarTimeBlock[],
+  time: ClockTime,
+  date = new Date(),
+): CalendarTimeBlock | null {
+  const target = new Date(date);
+  target.setHours(time.hour, time.minute, 0, 0);
+  const stamp = target.getTime();
+
+  return (
+    blocks.find((block) => {
+      const start = new Date(block.startAt).getTime();
+      const end = new Date(block.endAt).getTime();
+      return stamp >= start && stamp < end;
+    }) ?? null
+  );
+}
+
 /** Vertical offset in pixels for an hour gridline, measured from the top of the timeline. */
 export function hourOffsetPx(hour: number, startHour: number): number {
   return (hour - startHour) * HOUR_ROW_HEIGHT;
