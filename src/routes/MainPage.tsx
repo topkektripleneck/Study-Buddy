@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
+
+import { ConsistencyBar } from "@/components/ConsistencyBar";
 import { CommandBar } from "@/components/CommandBar";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { ZodiacBackdrop } from "@/components/ZodiacBackdrop";
 import { useWindowOpen } from "@/hooks/useWindowOpen";
-import { onNavigate } from "@/lib/actions";
+import { onNavigate, onOpenSettings, openSettings } from "@/lib/actions";
 import { KineticStack, PressableEnergy } from "@/ui/kit";
 import { MatrixView } from "@/views/MatrixView";
 import { ScheduleView } from "@/views/ScheduleView";
 import { WidgetsView } from "@/views/WidgetsView";
-import type { MainTab } from "@/types";
+import type { MainTab, SettingsSection } from "@/types";
 
 const TABS: { id: MainTab; label: string }[] = [
   { id: "widgets", label: "Widgets" },
@@ -18,55 +21,94 @@ const TABS: { id: MainTab; label: string }[] = [
 export function MainPage() {
   const [tab, setTab] = useState<MainTab>("widgets");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>();
   const calendarWindow = useWindowOpen("calendar");
-  const hudWindow = useWindowOpen("hud");
 
   useEffect(() => onNavigate(setTab), []);
+  useEffect(
+    () =>
+      onOpenSettings((section) => {
+        setSettingsSection(section);
+        setSettingsOpen(true);
+      }),
+    [],
+  );
+
+  function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const delta = event.key === "ArrowRight" ? 1 : -1;
+    const next = TABS[(index + delta + TABS.length) % TABS.length];
+    setTab(next.id);
+  }
 
   return (
-    <div style={page}>
+    <div style={page} className="sb-main-page">
+      <ZodiacBackdrop />
+      <div className="sb-themed-page__content">
       <header style={header}>
         <div>
           <p style={eyebrow}>Study Buddy</p>
-          <nav style={nav}>
-            {TABS.map((t) => (
+          <nav style={nav} role="tablist" aria-label="Main views">
+            {TABS.map((t, index) => (
               <button
                 key={t.id}
                 type="button"
+                role="tab"
+                id={`tab-${t.id}`}
+                aria-selected={tab === t.id}
+                aria-controls={`panel-${t.id}`}
+                tabIndex={tab === t.id ? 0 : -1}
                 className="sb-pressable sb-pressable-hover"
                 style={{
                   ...tabBtn,
                   ...(tab === t.id ? tabActive : {}),
                 }}
                 onClick={() => setTab(t.id)}
+                onKeyDown={(event) => onTabKeyDown(event, index)}
               >
                 {t.label}
               </button>
             ))}
           </nav>
         </div>
+
         <KineticStack direction="row" gap="sm">
-          <PressableEnergy variant="ghost" onClick={() => setSettingsOpen(true)}>
+          <PressableEnergy variant="ghost" onClick={() => openSettings()}>
             Settings
           </PressableEnergy>
           <PressableEnergy variant="ghost" onClick={() => calendarWindow.toggle()}>
             {calendarWindow.open ? "Close Calendar Window" : "Open Calendar Window"}
           </PressableEnergy>
-          <PressableEnergy variant="ghost" onClick={() => hudWindow.toggle()}>
-            {hudWindow.open ? "Remove HUD" : "Add HUD"}
-          </PressableEnergy>
         </KineticStack>
       </header>
 
-      <main style={content}>
-        {tab === "widgets" && <WidgetsView />}
-        {tab === "schedule" && <ScheduleView />}
-        {tab === "matrix" && <MatrixView />}
+      <ConsistencyBar />
+
+      <main style={content} role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+        <div className="sb-tab-panel" hidden={tab !== "widgets"}>
+          <WidgetsView />
+        </div>
+        <div className="sb-tab-panel" hidden={tab !== "schedule"}>
+          <ScheduleView />
+        </div>
+        <div className="sb-tab-panel" hidden={tab !== "matrix"}>
+          <MatrixView />
+        </div>
       </main>
 
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <SettingsPanel
+          initialSection={settingsSection}
+          onClose={() => {
+            setSettingsOpen(false);
+            setSettingsSection(undefined);
+          }}
+        />
+      )}
 
       <CommandBar />
+      </div>
     </div>
   );
 }
@@ -74,8 +116,6 @@ export function MainPage() {
 const page = {
   minHeight: "100vh",
   padding: "var(--sb-space-lg)",
-  background:
-    "radial-gradient(ellipse at top, rgba(110, 231, 255, 0.05), transparent 55%), var(--sb-bg-base)",
   overflow: "auto",
 };
 
@@ -83,7 +123,7 @@ const header = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
-  marginBottom: "var(--sb-space-lg)",
+  marginBottom: "var(--sb-space-md)",
   gap: "var(--sb-space-md)",
   flexWrap: "wrap" as const,
   padding: "var(--sb-space-md) var(--sb-space-lg)",
@@ -125,6 +165,5 @@ const tabActive = {
 
 const content = {
   minHeight: "480px",
-  // Leaves room for the docked command bar.
-  paddingBottom: "96px",
+  paddingBottom: "72px",
 };

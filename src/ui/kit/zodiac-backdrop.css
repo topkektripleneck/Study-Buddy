@@ -1,0 +1,454 @@
+[data-theme="astrology"] {
+  --sb-zodiac-sky: #06050e;
+}
+
+[data-theme="astrology"]:not([data-window="hud"]):not([data-window="toast"]) body {
+  background: var(--sb-zodiac-sky, #06050e);
+}
+
+.sb-main-page,
+.sb-themed-page {
+  position: relative;
+  isolation: isolate;
+}
+
+.sb-themed-page__content {
+  position: relative;
+  z-index: 1;
+  min-height: inherit;
+}
+
+.sb-zodiac-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background: radial-gradient(ellipse 100% 70% at 50% 15%, #0e0a1c 0%, #070511 60%, #020106 100%);
+}
+
+.sb-zodiac-backdrop__nebula {
+  position: absolute;
+  inset: -15%;
+  background:
+    radial-gradient(ellipse 65% 50% at 20% 18%, rgba(88, 120, 240, 0.28), transparent 65%),
+    radial-gradient(ellipse 60% 45% at 85% 25%, rgba(142, 68, 220, 0.24), transparent 60%),
+    radial-gradient(ellipse 70% 55% at 50% 90%, rgba(45, 90, 180, 0.2), transparent 60%),
+    radial-gradient(ellipse 45% 35% at 65% 65%, rgba(210, 140, 255, 0.15), transparent 55%);
+  filter: blur(36px);
+  will-change: transform;
+}
+
+.sb-zodiac-backdrop__sky {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.sb-zodiac-backdrop__sky-star {
+  fill: #fff;
+}
+
+@keyframes sb-star-twinkle {
+  0%, 100% {
+    opacity: 0.25;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.3);
+  }
+}
+
+.sb-zodiac-star--twinkle {
+  animation: sb-star-twinkle ease-in-out infinite alternate;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+/* Per-sign nebula tint */
+
+[data-theme="astrology"][data-sign="aries"] .sb-zodiac-backdrop {
+  background: radial-gradient(
+    ellipse 110% 75% at 50% 12%,
+    #220605 0%,
+    #110303 50%,
+    #050101 100%
+  );
+}
+
+[data-theme="astrology"][data-sign="aries"] .sb-zodiac-backdrop__nebula {
+  background:
+    /* Upper vermilion cinnabar sky wash */
+    radial-gradient(ellipse 70% 50% at 30% 16%, rgba(185, 38, 25, 0.42), transparent 65%),
+    /* Radiant sunrise solar gold on the horizon */
+    radial-gradient(ellipse 55% 45% at 80% 42%, rgba(235, 175, 45, 0.36), transparent 55%),
+    /* Deep crimson wine starlight depth */
+    radial-gradient(ellipse 55% 40% at 88% 14%, rgba(120, 16, 12, 0.35), transparent 60%),
+    /* Verdant meadow hill aura across the base */
+    radial-gradient(ellipse 72% 50% at 45% 92%, rgba(46, 115, 65, 0.35), transparent 60%),
+    /* Lapis lazuli blossom cosmic dust */
+    radial-gradient(ellipse 42% 38% at 16% 56%, rgba(45, 88, 145, 0.3), transparent 55%),
+    /* Central solar starlight core */
+    radial-gradient(circle at 65% 32%, rgba(255, 215, 90, 0.22), transparent 45%);
+  filter: blur(32px);
+}
+
+[data-theme="astrology"][data-sign="taurus"] .sb-zodiac-backdrop {
+  background: radial-gradient(
+    ellipse 110% 75% at 50% 12%,
+    #0a1835 0%,
+    #050d1d 50%,
+    #02050c 100%
+  );
+}
+
+[data-theme="astrology"][data-sign="taurus"] .sb-zodiac-backdrop__nebula {
+  background:
+    /* Royal lapis lazuli cosmic blue expanse */
+    radial-gradient(ellipse 70% 50% at 30% 16%, rgba(20, 55, 125, 0.45), transparent 65%),
+    /* Golden rosette & bull starlight */
+    radial-gradient(ellipse 55% 45% at 75% 38%, rgba(215, 165, 50, 0.36), transparent 55%),
+    /* Tawny ochre warmth */
+    radial-gradient(ellipse 48% 40% at 20% 48%, rgba(185, 130, 60, 0.3), transparent 55%),
+    /* Forest meadow grass at bottom */
+    radial-gradient(ellipse 70% 48% at 45% 92%, rgba(45, 95, 45, 0.35), transparent 60%),
+    /* Coral blossom starlight accent */
+    radial-gradient(ellipse 35% 32% at 85% 75%, rgba(200, 70, 50, 0.24), transparent 50%),
+    /* Golden celestial trellis glow */
+    radial-gradient(circle at 60% 30%, rgba(255, 215, 95, 0.18), transparent 45%);
+  filter: blur(34px);
+}
+
+[data-theme="astrology"][data-sign="gemini"] .sb-zodiac-backdrop {
+  background: radial-gradient(
+    ellipse 110% 75% at 50% 12%,
+    #0b1a38 0%,
+    #060e1f 50%,
+    #020409 100%
+  );
+}
+
+[data-theme="astrology"][data-sign="gemini"] .sb-zodiac-backdrop__nebula {
+  background:
+    /* Royal lapis blue celestial sky */
+    radial-gradient(ellipse 70% 50% at 25% 18%, rgba(22, 58, 128, 0.46), transparent 65%),
+    /* Vermilion coral robe glow on opposite flank */
+    radial-gradient(ellipse 55% 45% at 80% 35%, rgba(195, 68, 45, 0.36), transparent 55%),
+    /* Golden amber hair & trellis aura */
+    radial-gradient(ellipse 50% 42% at 50% 30%, rgba(220, 170, 60, 0.34), transparent 55%),
+    /* Malachite green bird & flowered lawn */
+    radial-gradient(ellipse 70% 50% at 45% 92%, rgba(42, 105, 60, 0.34), transparent 60%),
+    /* Moonlit silver dove stardust */
+    radial-gradient(ellipse 38% 35% at 18% 65%, rgba(220, 210, 185, 0.2), transparent 50%);
+  filter: blur(34px);
+}
+
+[data-theme="astrology"][data-sign="cancer"] .sb-zodiac-backdrop {
+  background: radial-gradient(
+    ellipse 110% 75% at 50% 12%,
+    #081734 0%,
+    #050d1d 50%,
+    #020409 100%
+  );
+}
+
+[data-theme="astrology"][data-sign="cancer"] .sb-zodiac-backdrop__nebula {
+  background:
+    /* Deep night pond azure water wash */
+    radial-gradient(ellipse 70% 52% at 35% 20%, rgba(25, 55, 115, 0.48), transparent 65%),
+    /* Terracotta crimson crab celestial glow */
+    radial-gradient(ellipse 55% 45% at 25% 50%, rgba(195, 75, 42, 0.38), transparent 55%),
+    /* Gilded checkered sky star gold */
+    radial-gradient(ellipse 55% 42% at 80% 25%, rgba(215, 170, 60, 0.36), transparent 55%),
+    /* Crescent moon luminous pearl silver */
+    radial-gradient(ellipse 40% 38% at 75% 55%, rgba(230, 220, 200, 0.28), transparent 50%),
+    /* Shoreline herb green at base */
+    radial-gradient(ellipse 70% 48% at 45% 92%, rgba(55, 95, 45, 0.32), transparent 60%);
+  filter: blur(34px);
+}
+
+[data-theme="astrology"][data-sign="leo"] .sb-zodiac-backdrop {
+  background: radial-gradient(
+    ellipse 110% 75% at 50% 12%,
+    #250806 0%,
+    #120403 50%,
+    #050101 100%
+  );
+}
+
+[data-theme="astrology"][data-sign="leo"] .sb-zodiac-backdrop__nebula {
+  background:
+    /* Vermilion cinnabar royal field */
+    radial-gradient(ellipse 72% 52% at 30% 16%, rgba(188, 35, 25, 0.45), transparent 65%),
+    /* Crowned imperial gold lion aura */
+    radial-gradient(ellipse 58% 48% at 75% 40%, rgba(240, 180, 45, 0.4), transparent 55%),
+    /* Deep crimson wine starlight depth */
+    radial-gradient(ellipse 55% 40% at 88% 15%, rgba(125, 18, 14, 0.35), transparent 60%),
+    /* Verdant royal lawn across base */
+    radial-gradient(ellipse 72% 50% at 45% 92%, rgba(55, 90, 48, 0.35), transparent 60%),
+    /* Ultramarine blossom cosmic dust */
+    radial-gradient(ellipse 40% 35% at 18% 60%, rgba(36, 70, 125, 0.28), transparent 55%),
+    /* Silver starlight acanthus scroll gleam */
+    radial-gradient(circle at 62% 28%, rgba(235, 225, 210, 0.22), transparent 45%);
+  filter: blur(34px);
+}
+
+[data-theme="astrology"][data-sign="virgo"] .sb-zodiac-backdrop {
+  background: radial-gradient(
+    ellipse 110% 75% at 50% 12%,
+    #0a1835 0%,
+    #050d1d 50%,
+    #020409 100%
+  );
+}
+
+[data-theme="astrology"][data-sign="virgo"] .sb-zodiac-backdrop__nebula {
+  background:
+    /* Royal lapis lazuli trellis sky */
+    radial-gradient(ellipse 70% 50% at 30% 16%, rgba(24, 60, 128, 0.45), transparent 65%),
+    /* Terracotta orange gown warmth */
+    radial-gradient(ellipse 55% 45% at 35% 55%, rgba(190, 75, 38, 0.38), transparent 55%),
+    /* Harvest wheat sheaf gold on the right */
+    radial-gradient(ellipse 55% 45% at 80% 45%, rgba(220, 165, 55, 0.38), transparent 55%),
+    /* Herbal meadow lawn at base */
+    radial-gradient(ellipse 70% 50% at 45% 92%, rgba(55, 100, 55, 0.34), transparent 60%),
+    /* Linen starlight veil illumination */
+    radial-gradient(ellipse 38% 35% at 45% 25%, rgba(235, 225, 215, 0.22), transparent 50%);
+  filter: blur(34px);
+}
+
+[data-theme="astrology"][data-sign="libra"] .sb-zodiac-backdrop {
+  background: radial-gradient(
+    ellipse 110% 75% at 50% 12%,
+    #0a1835 0%,
+    #050d1d 50%,
+    #020409 100%
+  );
+}
+
+[data-theme="astrology"][data-sign="libra"] .sb-zodiac-backdrop__nebula {
+  background:
+    /* Royal lapis lazuli dotted trellis expanse */
+    radial-gradient(ellipse 70% 50% at 30% 16%, rgba(19, 55, 119, 0.46), transparent 65%),
+    /* Golden scales of justice balance aura */
+    radial-gradient(ellipse 55% 45% at 65% 40%, rgba(215, 168, 55, 0.38), transparent 55%),
+    /* Terracotta coral sleeve & left pan flower */
+    radial-gradient(ellipse 48% 42% at 20% 35%, rgba(198, 72, 42, 0.34), transparent 55%),
+    /* Mossy meadow lawn across base */
+    radial-gradient(ellipse 70% 50% at 45% 92%, rgba(59, 92, 51, 0.34), transparent 60%),
+    /* Alabaster white flower petal starlight */
+    radial-gradient(ellipse 35% 32% at 75% 55%, rgba(237, 234, 224, 0.22), transparent 50%),
+    /* Celestial star ring glow */
+    radial-gradient(circle at 50% 20%, rgba(255, 215, 95, 0.18), transparent 45%);
+  filter: blur(34px);
+}
+
+[data-theme="astrology"][data-sign="scorpio"] .sb-zodiac-backdrop {
+  background: radial-gradient(
+    ellipse 110% 75% at 50% 12%,
+    #1d080b 0%,
+    #0e0406 50%,
+    #030102 100%
+  );
+}
+
+[data-theme="astrology"][data-sign="scorpio"] .sb-zodiac-backdrop__nebula {
+  background:
+    /* Checkered sky vermilion cinnabar wash */
+    radial-gradient(ellipse 68% 50% at 25% 25%, rgba(175, 38, 28, 0.42), transparent 65%),
+    /* Checkered sky deep royal azure wash */
+    radial-gradient(ellipse 65% 48% at 75% 65%, rgba(27, 62, 130, 0.42), transparent 60%),
+    /* Radiant eight-pointed star golden fire */
+    radial-gradient(ellipse 50% 45% at 50% 15%, rgba(218, 168, 52, 0.42), transparent 55%),
+    /* Deep obsidian bronze depth */
+    radial-gradient(ellipse 60% 45% at 50% 55%, rgba(30, 20, 20, 0.5), transparent 60%),
+    /* Starlight rosette pearl stardust */
+    radial-gradient(circle at 50% 15%, rgba(255, 235, 180, 0.25), transparent 45%);
+  filter: blur(34px);
+}
+
+[data-theme="astrology"][data-sign="sagittarius"] .sb-zodiac-backdrop {
+  background: radial-gradient(
+    ellipse 110% 75% at 50% 12%,
+    #250806 0%,
+    #120403 50%,
+    #050101 100%
+  );
+}
+
+[data-theme="astrology"][data-sign="sagittarius"] .sb-zodiac-backdrop__nebula {
+  background:
+    /* Brilliant vermilion cinnabar celestial sky */
+    radial-gradient(ellipse 72% 52% at 30% 16%, rgba(195, 40, 28, 0.46), transparent 65%),
+    /* Archer's eight-pointed star & golden bow gleam */
+    radial-gradient(ellipse 55% 45% at 85% 18%, rgba(235, 175, 52, 0.42), transparent 55%),
+    /* Starry royal blue mantle glow */
+    radial-gradient(ellipse 45% 40% at 35% 38%, rgba(26, 67, 136, 0.35), transparent 55%),
+    /* Emerald rolling hills & trees at base */
+    radial-gradient(ellipse 72% 50% at 45% 92%, rgba(53, 97, 51, 0.35), transparent 60%),
+    /* Winding golden road radiance */
+    radial-gradient(ellipse 45% 40% at 70% 68%, rgba(215, 165, 50, 0.3), transparent 55%),
+    /* Silver acanthus scroll stardust */
+    radial-gradient(circle at 60% 30%, rgba(235, 225, 210, 0.2), transparent 45%);
+  filter: blur(34px);
+}
+
+[data-theme="astrology"][data-sign="capricorn"] .sb-zodiac-backdrop {
+  background: radial-gradient(
+    ellipse 110% 75% at 50% 12%,
+    #0a1835 0%,
+    #050d1d 50%,
+    #020409 100%
+  );
+}
+
+[data-theme="astrology"][data-sign="capricorn"] .sb-zodiac-backdrop__nebula {
+  background:
+    /* Royal lapis lazuli gold-dotted sky */
+    radial-gradient(ellipse 70% 50% at 30% 16%, rgba(20, 53, 117, 0.45), transparent 65%),
+    /* Stone tower masonry limestone warmth */
+    radial-gradient(ellipse 55% 45% at 65% 55%, rgba(190, 180, 155, 0.34), transparent 55%),
+    /* Gilded trellis & horned goat golden glow */
+    radial-gradient(ellipse 50% 42% at 45% 25%, rgba(215, 165, 55, 0.35), transparent 55%),
+    /* Alpine meadow grass at base */
+    radial-gradient(ellipse 70% 50% at 45% 92%, rgba(54, 89, 45, 0.34), transparent 60%),
+    /* Russet blossom floral accents */
+    radial-gradient(ellipse 35% 30% at 88% 75%, rgba(184, 64, 37, 0.25), transparent 50%);
+  filter: blur(34px);
+}
+
+[data-theme="astrology"][data-sign="aquarius"] .sb-zodiac-backdrop {
+  background: radial-gradient(
+    ellipse 110% 75% at 50% 12%,
+    #081738 0%,
+    #040d20 50%,
+    #010309 100%
+  );
+}
+
+[data-theme="astrology"][data-sign="aquarius"] .sb-zodiac-backdrop__nebula {
+  background:
+    /* Torrential celestial river azure wash */
+    radial-gradient(ellipse 70% 52% at 75% 65%, rgba(28, 82, 175, 0.48), transparent 65%),
+    /* Golden amphora & cascade of golden stars */
+    radial-gradient(ellipse 55% 45% at 65% 42%, rgba(230, 175, 55, 0.4), transparent 55%),
+    /* Royal lapis sky trellis */
+    radial-gradient(ellipse 65% 50% at 25% 20%, rgba(18, 45, 105, 0.44), transparent 60%),
+    /* Terracotta tunic & chest star medallion */
+    radial-gradient(ellipse 45% 40% at 35% 45%, rgba(190, 75, 40, 0.35), transparent 55%),
+    /* Flowered meadow lawn at base */
+    radial-gradient(ellipse 70% 50% at 45% 92%, rgba(56, 94, 53, 0.32), transparent 60%),
+    /* Spark of stardust from the urn */
+    radial-gradient(circle at 70% 50%, rgba(255, 225, 120, 0.22), transparent 45%);
+  filter: blur(34px);
+}
+
+[data-theme="astrology"][data-sign="pisces"] .sb-zodiac-backdrop {
+  background: radial-gradient(
+    ellipse 110% 75% at 50% 12%,
+    #071736 0%,
+    #030c1e 50%,
+    #010309 100%
+  );
+}
+
+[data-theme="astrology"][data-sign="pisces"] .sb-zodiac-backdrop__nebula {
+  background:
+    /* Marine azure whirling pond wash */
+    radial-gradient(ellipse 70% 52% at 50% 50%, rgba(38, 98, 166, 0.48), transparent 65%),
+    /* Shimmering silver fish scale gleam */
+    radial-gradient(ellipse 48% 44% at 50% 48%, rgba(210, 214, 216, 0.35), transparent 55%),
+    /* Checkered sky gold tile luminescence */
+    radial-gradient(ellipse 55% 42% at 78% 22%, rgba(201, 156, 53, 0.38), transparent 55%),
+    /* Coral vermilion fins & red tile warmth */
+    radial-gradient(ellipse 50% 38% at 22% 25%, rgba(184, 56, 40, 0.35), transparent 55%),
+    /* Scalloped basin jade rim & lawn across base */
+    radial-gradient(ellipse 70% 50% at 45% 92%, rgba(72, 109, 56, 0.32), transparent 60%),
+    /* Core celestial pool swirl */
+    radial-gradient(circle at 50% 50%, rgba(140, 200, 255, 0.22), transparent 45%);
+  filter: blur(34px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sb-zodiac-backdrop__star-glow {
+    filter: none;
+  }
+  .sb-zodiac-star--twinkle {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .sb-zodiac-backdrop__figure path {
+    stroke: rgba(255, 255, 255, 0.22);
+  }
+}
+
+/* Astrology — glass widgets so the zodiac backdrop shows through */
+
+[data-theme="astrology"] .sb-widgets-grid .sb-surface {
+  --sb-surface-bg: color-mix(in srgb, var(--sb-bg-overlay) 28%, transparent);
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  border-color: color-mix(in srgb, var(--sb-border-glow) 45%, rgba(255, 255, 255, 0.12));
+  box-shadow:
+    0 12px 36px -6px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+}
+
+[data-theme="astrology"] .sb-widgets-grid .sb-glow-border__inner {
+  background: transparent;
+}
+
+[data-theme="astrology"] .sb-widgets-grid .sb-widget-add-card {
+  --sb-widget-add-bg: color-mix(in srgb, var(--sb-bg-overlay) 22%, transparent);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+}
+
+[data-theme="astrology"] .sb-widgets-grid .sb-widget-drag-handle {
+  background: color-mix(in srgb, var(--sb-bg-overlay) 45%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-color: color-mix(in srgb, var(--sb-border-glow) 40%, rgba(255, 255, 255, 0.1));
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme="astrology"] .sb-widgets-grid .sb-surface {
+    --sb-surface-bg: var(--sb-bg-overlay);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  [data-theme="astrology"] .sb-widgets-grid .sb-glow-border__inner,
+  [data-theme="astrology"] .sb-widgets-grid .sb-widget-add-card {
+    --sb-glow-inner-bg: var(--sb-bg-overlay);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--sb-bg-overlay) !important;
+  }
+}
+
+/* Zodiac artwork floating card fade-in animation */
+.sb-zodiac-art-img {
+  animation: sb-art-fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes sb-art-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sb-zodiac-art-img {
+    animation: none;
+  }
+}

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type WindowLabel = "main" | "calendar" | "hud";
+export type WindowLabel = "main" | "calendar" | "hud" | "toast";
 
 export async function openWindow(label: WindowLabel): Promise<void> {
   await invoke<void>("window_open", { label });

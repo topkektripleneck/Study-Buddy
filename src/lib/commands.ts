@@ -1,14 +1,20 @@
+import { save, open } from "@tauri-apps/plugin-dialog";
 import {
   addBlock,
   createTask,
   deleteTask,
+  exportBackup,
+  importBackup,
+  importCalendarIcs,
   findTaskByQuery,
   navigateTo,
+  openSettings,
   pauseTimer,
   removeBlockAt,
-  resetTimer,
+  resetData,
   resumeTimer,
   setHud,
+  setDailyTarget,
   skipPhase,
   startFocus,
   startStopwatch,
@@ -32,6 +38,13 @@ export interface CommandSpec {
   usage: string;
   summary: string;
   run: (args: string[]) => Promise<CommandOutcome>;
+}
+
+function stripDocSyntax(token: string): string {
+  let s = token.trim();
+  if (s.startsWith("<") && s.endsWith(">")) s = s.slice(1, -1);
+  if (s.startsWith("[") && s.endsWith("]")) s = s.slice(1, -1);
+  return s;
 }
 
 function tokenize(input: string): string[] {
@@ -69,15 +82,33 @@ export const COMMANDS: CommandSpec[] = [
   },
   { id: "pause", names: ["pause", "p"], usage: "pause", summary: "Pause timer", run: () => pauseTimer() },
   { id: "resume", names: ["resume", "r"], usage: "resume", summary: "Resume timer", run: () => resumeTimer() },
-  { id: "reset", names: ["reset"], usage: "reset", summary: "Clear session", run: () => resetTimer() },
+  { id: "reset", names: ["reset"], usage: "reset [all|timer|tasks|calendar|matrix|widgets|journal|energy|metrics]", summary: "Clear timer or reset saved data", run: async (args) => {
+      const target = args[0] ? stripDocSyntax(args[0].toLowerCase()) : "timer";
+      return resetData(target);
+    },
+  },
   { id: "skip", names: ["skip"], usage: "skip", summary: "Next phase", run: () => skipPhase() },
+  {
+    id: "target",
+    names: ["target", "goal"],
+    usage: "target <minutes>",
+    summary: "Set daily focus goal",
+    run: async (args) => {
+      if (!args[0]) return { ok: false, message: "Give a number of minutes (e.g. target 120)" };
+      const minutes = Number(args[0]);
+      if (!Number.isFinite(minutes)) {
+        return { ok: false, message: `"${args[0]}" is not a number of minutes` };
+      }
+      return setDailyTarget(minutes);
+    },
+  },
   {
     id: "block",
     names: ["block", "b"],
-    usage: 'block <1:30-2:30> [kind] "title"',
+    usage: 'block 1:30-2:30 focus "title"',
     summary: "Add a time block",
     run: async (args) => {
-      const range = args[0] ? parseTimeRange(args[0]) : null;
+      const range = args[0] ? parseTimeRange(stripDocSyntax(args[0])) : null;
       if (!range) return { ok: false, message: "Expected a range like 1:30-2:30" };
       const { kind, title } = readKindAndTitle(args.slice(1));
       const outcome = await addBlock({ title, kind, start: range.start, end: range.end });
@@ -145,6 +176,68 @@ export const COMMANDS: CommandSpec[] = [
     },
   },
   {
+    id: "settings",
+    names: ["settings", "prefs", "preferences"],
+    usage: "settings [appearance|notifications|focus|schedule|windows|data]",
+    summary: "Open settings",
+    run: async (args) => {
+      const section = args[0]?.toLowerCase();
+      const sections: Record<string, import("@/types").SettingsSection> = {
+        appearance: "appearance",
+        theme: "appearance",
+        notifications: "notifications",
+        notify: "notifications",
+        focus: "focus",
+        timer: "focus",
+        schedule: "schedule",
+        calendar: "schedule",
+        windows: "windows",
+        hud: "windows",
+        data: "data",
+      };
+      return openSettings(section ? sections[section] : undefined);
+    },
+  },
+  {
+    id: "export",
+    names: ["export", "backup"],
+    usage: "export",
+    summary: "Save a zip backup of local data",
+    run: async () => {
+      const dest = await save({
+        defaultPath: `study-buddy-backup-${new Date().toISOString().slice(0, 10)}.zip`,
+        filters: [{ name: "Zip archive", extensions: ["zip"] }],
+      });
+      if (!dest || typeof dest !== "string") {
+        return { ok: false, message: "Export cancelled" };
+      }
+      return exportBackup(dest);
+    },
+  },
+  {
+    id: "import",
+    names: ["import", "restore"],
+    usage: "import",
+    summary: "Restore local data from a backup zip",
+    run: async () => {
+      const src = await open({
+        multiple: false,
+        filters: [{ name: "Zip archive", extensions: ["zip"] }],
+      });
+      if (!src || typeof src !== "string") {
+        return { ok: false, message: "Restore cancelled" };
+      }
+      if (
+        !window.confirm(
+          "Restore from this backup? Current data will be replaced. A pre-restore snapshot is saved under backups/.",
+        )
+      ) {
+        return { ok: false, message: "Restore cancelled" };
+      }
+      return importBackup(src);
+    },
+  },
+  {
     id: "data",
     names: ["data"],
     usage: "data",
@@ -154,10 +247,26 @@ export const COMMANDS: CommandSpec[] = [
       return { ok: true, message: "Opened data folder" };
     },
   },
+  {
+    id: "gcal",
+    names: ["gcal", "ics"],
+    usage: "gcal",
+    summary: "Import a Google Calendar .ics export",
+    run: async () => {
+      const src = await open({
+        multiple: false,
+        filters: [{ name: "iCalendar", extensions: ["ics"] }],
+      });
+      if (!src || typeof src !== "string") {
+        return { ok: false, message: "Import cancelled" };
+      }
+      return importCalendarIcs(src);
+    },
+  },
 ];
 
 function readKindAndTitle(args: string[]): { kind: BlockKind; title: string } {
-  const maybeKind = args[0]?.toLowerCase();
+  const maybeKind = stripDocSyntax(args[0]?.toLowerCase() ?? "");
   const known = BLOCK_KINDS.find((k) => k.value === maybeKind);
   const rest = known ? args.slice(1) : args;
   return {

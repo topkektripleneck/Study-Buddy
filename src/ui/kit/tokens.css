@@ -1,29 +1,93 @@
 :root {
   color-scheme: dark;
 
-  /* Surfaces */
-  --sb-bg-base: #0a0c10;
-  --sb-bg-raised: #12151c;
-  --sb-bg-overlay: #181c26;
-  --sb-bg-hud: rgba(10, 12, 16, 0.92);
+  /* Night sky surfaces */
+  --sb-bg-base: #07060f;
+  --sb-bg-raised: #0f0d1a;
+  --sb-bg-overlay: #151228;
+  --sb-bg-hud: rgba(7, 6, 15, 0.92);
 
-  /* Text */
-  --sb-text-primary: #eef1f8;
-  --sb-text-secondary: #9aa3b5;
-  --sb-text-muted: #5c6578;
+  /* Text — moonlit */
+  --sb-text-primary: #ede8ff;
+  --sb-text-secondary: #a89ec4;
+  --sb-text-muted: #6b6288;
 
-  /* Accent & glow (originkit kinetic palette) */
-  --sb-accent: #6ee7ff;
-  --sb-accent-dim: #2a8fa3;
-  --sb-glow-accent: rgba(110, 231, 255, 0.45);
-  --sb-glow-warm: rgba(255, 160, 90, 0.35);
-  --sb-glow-success: rgba(110, 255, 180, 0.3);
+  /* Default accent (Orion — focus / navigation) */
+  --sb-accent: var(--sb-const-orion);
+  --sb-accent-dim: var(--sb-const-orion-dim);
+  --sb-glow-accent: var(--sb-glow-orion);
+  --sb-border-glow: var(--sb-border-orion);
+  --sb-glow-warm: var(--sb-glow-leo);
+  --sb-glow-success: var(--sb-glow-draco);
+
+  /* Constellation palettes */
+  --sb-const-orion: #9ec8ff;
+  --sb-const-orion-dim: #3a5f8f;
+  --sb-glow-orion: rgba(158, 200, 255, 0.45);
+  --sb-border-orion: rgba(158, 200, 255, 0.28);
+
+  --sb-const-leo: #f5c451;
+  --sb-const-leo-dim: #9a6b18;
+  --sb-glow-leo: rgba(245, 196, 81, 0.42);
+  --sb-border-leo: rgba(245, 196, 81, 0.28);
+
+  --sb-const-scorpio: #d16bff;
+  --sb-const-scorpio-dim: #6e2d7a;
+  --sb-glow-scorpio: rgba(209, 107, 255, 0.4);
+  --sb-border-scorpio: rgba(209, 107, 255, 0.26);
+
+  --sb-const-lyra: #b89cff;
+  --sb-const-lyra-dim: #5c3f99;
+  --sb-glow-lyra: rgba(184, 156, 255, 0.42);
+  --sb-border-lyra: rgba(184, 156, 255, 0.26);
+
+  --sb-const-cassiopeia: #ff7eb8;
+  --sb-const-cassiopeia-dim: #9a3568;
+  --sb-glow-cassiopeia: rgba(255, 126, 184, 0.38);
+  --sb-border-cassiopeia: rgba(255, 126, 184, 0.26);
+
+  --sb-const-ursa: #ffc896;
+  --sb-const-ursa-dim: #9a6840;
+  --sb-glow-ursa: rgba(255, 200, 150, 0.38);
+  --sb-border-ursa: rgba(255, 200, 150, 0.24);
+
+  --sb-const-cygnus: #6ee7d8;
+  --sb-const-cygnus-dim: #2a8f86;
+  --sb-glow-cygnus: rgba(110, 231, 216, 0.4);
+  --sb-border-cygnus: rgba(110, 231, 216, 0.26);
+
+  --sb-const-andromeda: #9db4ff;
+  --sb-const-andromeda-dim: #4a5f99;
+  --sb-glow-andromeda: rgba(157, 180, 255, 0.4);
+  --sb-border-andromeda: rgba(157, 180, 255, 0.26);
+
+  --sb-const-draco: #5ee89a;
+  --sb-const-draco-dim: #2a8f5c;
+  --sb-glow-draco: rgba(94, 232, 154, 0.38);
+  --sb-border-draco: rgba(94, 232, 154, 0.24);
+
+  --sb-const-pegasus: #d4c4ff;
+  --sb-const-pegasus-dim: #7564a8;
+  --sb-glow-pegasus: rgba(212, 196, 255, 0.38);
+  --sb-border-pegasus: rgba(212, 196, 255, 0.24);
+
+  --sb-const-gemini: #87ceeb;
+  --sb-const-gemini-dim: #4a7a94;
+  --sb-glow-gemini: rgba(135, 206, 235, 0.38);
+  --sb-border-gemini: rgba(135, 206, 235, 0.24);
+
+  --sb-const-aries: #ff7b6b;
+  --sb-const-aries-dim: #99453a;
+  --sb-glow-aries: rgba(255, 123, 107, 0.4);
+  --sb-border-aries: rgba(255, 123, 107, 0.26);
 
   /* Borders */
-  --sb-border-subtle: rgba(255, 255, 255, 0.06);
-  --sb-border-glow: rgba(110, 231, 255, 0.25);
+  --sb-border-subtle: rgba(200, 180, 255, 0.08);
 
-  /* Motion — strong curves (emil-design-eng), critical damping default (apple-design) */
+  --sb-error: #ffaaaa;
+  --sb-warn: #ffcc88;
+
+  /* Motion */
   --sb-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --sb-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --sb-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
@@ -34,12 +98,12 @@
   --sb-duration-modal: 240ms;
   --sb-duration-slow: 380ms;
 
-  /* Materials (apple-design) */
-  --sb-material-bg: rgba(24, 28, 38, 0.72);
-  --sb-material-border: rgba(255, 255, 255, 0.08);
+  /* Materials */
+  --sb-material-bg: rgba(21, 18, 40, 0.78);
+  --sb-material-border: rgba(180, 160, 255, 0.1);
   --sb-material-blur: 20px;
-  --sb-material-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
-  --sb-scrim: rgba(0, 0, 0, 0.55);
+  --sb-material-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+  --sb-scrim: rgba(4, 3, 12, 0.62);
 
   /* Radius & spacing */
   --sb-radius-sm: 6px;
@@ -51,7 +115,7 @@
   --sb-space-lg: 24px;
   --sb-space-xl: 32px;
 
-  /* Typography — optical sizing (apple-design) */
+  /* Typography */
   --sb-font-sans: "Segoe UI", system-ui, -apple-system, sans-serif;
   --sb-font-mono: "Cascadia Code", "Consolas", monospace;
   --sb-tracking-tight: -0.02em;
@@ -82,6 +146,11 @@ body,
 
 body {
   overflow: hidden;
+  background:
+    radial-gradient(ellipse 80% 50% at 15% 10%, rgba(209, 107, 255, 0.07), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 85% 15%, rgba(158, 200, 255, 0.06), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(245, 196, 81, 0.05), transparent 55%),
+    var(--sb-bg-base);
 }
 
 button {

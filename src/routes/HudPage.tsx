@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useMetrics, useTimer } from "@/hooks/useTimer";
 import { useNow } from "@/hooks/useNow";
+import { formatPhase } from "@/lib/format";
 import { closeWindow, openWindow } from "@/lib/windows";
 import { KineticStack, Surface } from "@/ui/kit";
 
@@ -10,33 +11,33 @@ export function HudPage() {
   const now = useNow(1_000);
 
   const clock = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  const phase = isIdle ? "idle" : (tick?.phase ?? "timer").replace("_", " ");
+  const phase = isIdle ? "idle" : formatPhase(tick?.phase ?? "timer");
 
   useEffect(() => {
-    document.documentElement.style.background = "transparent";
-    document.body.style.background = "transparent";
-
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") closeWindow("hud");
     }
     window.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      document.documentElement.style.background = "";
-      document.body.style.background = "";
-      window.removeEventListener("keydown", onKeyDown);
-    };
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   return (
-    <div style={hudShell} data-tauri-drag-region>
+    <div className="sb-hud-page" style={hudShell} data-tauri-drag-region>
       <Surface
         padding="sm"
         variant="overlay"
+        className="sb-hud-bar"
         style={hudBar}
-        data-tauri-drag-region
+        data-tauri-drag-region="false"
         onClick={() => openWindow("main")}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openWindow("main");
+          }
+        }}
         role="button"
+        tabIndex={0}
         title="Click to focus Study Buddy"
       >
         <KineticStack direction="row" gap="md" align="center">
@@ -53,7 +54,7 @@ export function HudPage() {
           <Metric label="Today" value={`${metrics?.todayCompletionPercent ?? 0}%`} />
           <button
             type="button"
-            className="sb-pressable"
+            className="sb-pressable sb-pressable-hover"
             style={closeBtn}
             data-tauri-drag-region="false"
             onClick={(event) => {
@@ -91,7 +92,6 @@ const hudShell = {
 
 const hudBar = {
   width: "100%",
-  background: "var(--sb-bg-hud)",
   border: "1px solid var(--sb-border-glow)",
   boxShadow: "0 0 20px var(--sb-glow-accent)",
   cursor: "pointer",

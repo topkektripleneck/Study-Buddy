@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useListen } from "@/hooks/useListen";
 import { useTimer } from "@/hooks/useTimer";
 import { useWindowOpen } from "@/hooks/useWindowOpen";
 import { api } from "@/lib/api";
 import {
+  ackTimerSuspend,
+  confirmTimerRestore,
+  discardTimerRestore,
   pauseTimer,
   resetTimer,
   resumeTimer,
@@ -11,31 +15,86 @@ import {
   startFocus,
   startStopwatch,
 } from "@/lib/actions";
+import { formatPhase } from "@/lib/format";
 import { breakPlanFor } from "@/lib/breaks";
+import { formatTimerMs } from "@/lib/timerStore";
 import { GlowBorder, KineticStack, PressableEnergy, Surface } from "@/ui/kit";
+import type { TimerRestoreOffer } from "@/types";
 
 const FOCUS_PRESETS = [15, 25, 50];
 
 export function FocusWidget() {
   const { displayTime, isRunning, isPaused, isIdle, tick } = useTimer();
   const [focusMinutes, setFocusMinutes] = useState(25);
+  const [restoreOffer, setRestoreOffer] = useState<TimerRestoreOffer | null>(null);
   const { open: hudOpen } = useWindowOpen("hud");
 
-  useEffect(() => {
+  const refreshFocusMinutes = useCallback(() => {
     api.configGet().then((c) => setFocusMinutes(c.pomodoroFocusMinutes));
   }, []);
+
+  const refreshRestoreOffer = useCallback(() => {
+    api.timerGetPendingRestore().then(setRestoreOffer);
+  }, []);
+
+  useEffect(() => {
+    refreshFocusMinutes();
+    refreshRestoreOffer();
+  }, [refreshFocusMinutes, refreshRestoreOffer]);
+
+  useListen(refreshFocusMinutes, "config:changed");
+  useListen(refreshRestoreOffer, "timer:restore-pending");
 
   const phase = tick?.phase ?? "idle";
   const isBreak = phase === "short_break" || phase === "long_break";
   const breakMinutes = Math.round((tick?.phaseDurationMs ?? 0) / 60_000);
   const plan = isBreak ? breakPlanFor(breakMinutes) : null;
+  const idlePreview = `${String(focusMinutes).padStart(2, "0")}:00`;
+  const suspendGapMs = tick?.suspendGapMs ?? null;
+
+  async function handleConfirmRestore() {
+    await confirmTimerRestore();
+    setRestoreOffer(null);
+  }
+
+  async function handleDiscardRestore() {
+    await discardTimerRestore();
+    setRestoreOffer(null);
+  }
 
   return (
     <GlowBorder active={isRunning} tone="accent">
       <Surface padding="lg" variant="overlay">
         <KineticStack gap="md" align="center">
-          <p style={phaseLabel}>{phase.replace("_", " ")}</p>
-          <p style={timerDisplay}>{displayTime}</p>
+          {restoreOffer && isIdle && (
+            <div style={noticePanel}>
+              <p style={noticeText}>
+                Resume {formatPhase(restoreOffer.phase)} session?
+                {restoreOffer.remainingMs != null
+                  ? ` (${formatTimerMs(restoreOffer.remainingMs)} left)`
+                  : ` (${formatTimerMs(restoreOffer.elapsedMs)} elapsed)`}
+              </p>
+              <KineticStack direction="row" gap="sm">
+                <PressableEnergy onClick={handleConfirmRestore}>Resume</PressableEnergy>
+                <PressableEnergy variant="ghost" onClick={handleDiscardRestore}>
+                  Discard
+                </PressableEnergy>
+              </KineticStack>
+            </div>
+          )}
+
+          {suspendGapMs != null && suspendGapMs > 0 && (
+            <div style={noticePanel}>
+              <p style={noticeText}>
+                System was asleep for {Math.max(1, Math.round(suspendGapMs / 60_000))} min — timer
+                paused
+              </p>
+              <PressableEnergy onClick={() => ackTimerSuspend()}>Continue</PressableEnergy>
+            </div>
+          )}
+
+          <p style={phaseLabel}>{formatPhase(phase)}</p>
+          <p style={timerDisplay}>{isIdle && !restoreOffer ? idlePreview : displayTime}</p>
 
           {isIdle && (
             <KineticStack direction="row" gap="sm">
@@ -43,6 +102,7 @@ export function FocusWidget() {
                 <button
                   key={m}
                   type="button"
+                  className="sb-pressable sb-pressable-hover"
                   style={{ ...chip, ...(focusMinutes === m ? chipActive : {}) }}
                   onClick={() => setFocusMinutes(m)}
                 >
@@ -105,7 +165,7 @@ export function FocusWidget() {
 
           <button
             type="button"
-            className="sb-pressable"
+            className="sb-pressable sb-pressable-hover"
             style={linkBtn}
             onClick={() => (hudOpen ? setHud(false) : setHud(true))}
           >
@@ -157,6 +217,15 @@ const breakPanel = {
 const breakHeadline = { margin: "0 0 8px", color: "var(--sb-text-secondary)" };
 const breakList = { margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "4px" };
 const breakItem = { color: "var(--sb-text-muted)" };
+const noticePanel = {
+  width: "100%",
+  padding: "10px 12px",
+  borderRadius: "var(--sb-radius-sm)",
+  background: "var(--sb-bg-raised)",
+  border: "1px solid var(--sb-border-glow)",
+  fontSize: "12px",
+};
+const noticeText = { margin: "0 0 8px", color: "var(--sb-text-secondary)" };
 const linkBtn = {
   border: "none",
   background: "transparent",

@@ -1,0 +1,34 @@
+/* HUD + toast — separate transparent shells, not the main workspace backdrop */
+
+[data-window="hud"] html,
+[data-window="hud"] body,
+[data-window="hud"] #root,
+[data-window="toast"] html,
+[data-window="toast"] body,
+[data-window="toast"] #root {
+  background: transparent !important;
+}
+
+[data-window="hud"],
+[data-window="toast"] {
+  /* Fixed compact chrome — ignore astrology sign surface tints */
+  --sb-bg-base: #07060f;
+  --sb-bg-raised: #0f0d1a;
+  --sb-bg-overlay: rgba(15, 13, 26, 0.94);
+  --sb-bg-hud: rgba(7, 6, 15, 0.94);
+}
+
+[data-window="hud"] .sb-hud-page,
+[data-window="toast"] .sb-toast-page {
+  background: transparent;
+}
+
+[data-window="hud"] .sb-surface {
+  backdrop-filter: none;
+}
+
+[data-window="hud"] .sb-hud-bar {
+  --sb-surface-bg: var(--sb-bg-hud);
+  background: var(--sb-bg-hud);
+  backdrop-filter: none;
+}

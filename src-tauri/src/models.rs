@@ -87,7 +87,7 @@ pub struct EisenhowerMatrixFile {
     pub archived_item_ids: Vec<Uuid>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuadrantOrder {
     pub do_first: Vec<Uuid>,
@@ -96,16 +96,6 @@ pub struct QuadrantOrder {
     pub eliminate: Vec<Uuid>,
 }
 
-impl Default for QuadrantOrder {
-    fn default() -> Self {
-        Self {
-            do_first: vec![],
-            schedule: vec![],
-            delegate: vec![],
-            eliminate: vec![],
-        }
-    }
-}
 
 impl QuadrantOrder {
     pub fn list_mut(&mut self, quadrant: EisenhowerQuadrant) -> &mut Vec<Uuid> {
@@ -140,6 +130,20 @@ pub enum BlockKind {
     Buffer,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RecurrenceFrequency {
+    Daily,
+    Weekly,
+    Weekdays,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockRecurrence {
+    pub frequency: RecurrenceFrequency,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CalendarTimeBlock {
@@ -153,8 +157,20 @@ pub struct CalendarTimeBlock {
     pub kind: BlockKind,
     pub color_token: String,
     pub notes: Option<String>,
+    #[serde(default)]
+    pub recurrence: Option<BlockRecurrence>,
+    #[serde(default)]
+    pub series_id: Option<Uuid>,
     pub created_at: Iso8601,
     pub updated_at: Iso8601,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarImportResult {
+    pub imported: u32,
+    pub skipped: u32,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -213,11 +229,29 @@ pub struct AppConfig {
     pub colored_time_blocks: bool,
     #[serde(default = "default_prompt_task_on_block")]
     pub prompt_task_on_block_create: bool,
+    #[serde(default = "default_true")]
+    pub notify_timer: bool,
+    #[serde(default = "default_true")]
+    pub notify_blocks: bool,
+    #[serde(default = "default_theme_id")]
+    pub theme_id: String,
+    #[serde(default = "default_zodiac_sign")]
+    pub zodiac_sign: String,
     pub active_widgets: Vec<String>,
     #[serde(default)]
     pub focus_start_chime_path: Option<String>,
     #[serde(default)]
     pub focus_end_chime_path: Option<String>,
+    #[serde(default = "default_false")]
+    pub notify_quiet_hours_enabled: bool,
+    #[serde(default = "default_quiet_start_hour")]
+    pub notify_quiet_start_hour: u32,
+    #[serde(default = "default_quiet_end_hour")]
+    pub notify_quiet_end_hour: u32,
+    #[serde(default = "default_eightbit_palette")]
+    pub eightbit_palette: String,
+    #[serde(default = "default_false")]
+    pub autostart: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -324,6 +358,20 @@ pub struct TimerTickPayload {
     pub phase_index: u32,
     pub cycle_length: u32,
     pub discontinuity: Discontinuity,
+    /// Set once after sleep/suspend healing pauses the timer; cleared by `timer_ack_suspend`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suspend_gap_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimerRestoreOffer {
+    pub session_id: String,
+    pub phase: TimerPhase,
+    pub elapsed_ms: u64,
+    pub remaining_ms: Option<u64>,
+    pub phase_duration_ms: Option<u64>,
+    pub protocol: String,
 }
 
 pub fn now_iso() -> Iso8601 {
@@ -334,12 +382,50 @@ pub fn default_prompt_task_on_block() -> bool {
     true
 }
 
+pub fn default_true() -> bool {
+    true
+}
+
+pub fn default_false() -> bool {
+    false
+}
+
+pub fn default_quiet_start_hour() -> u32 {
+    22
+}
+
+pub fn default_quiet_end_hour() -> u32 {
+    8
+}
+
+pub fn default_eightbit_palette() -> String {
+    "green".to_string()
+}
+
+pub fn default_theme_id() -> String {
+    "galaxy".to_string()
+}
+
+pub fn default_zodiac_sign() -> String {
+    "leo".to_string()
+}
+
 pub fn new_uuid() -> Uuid {
     uuid::Uuid::new_v4().to_string()
 }
 
 pub fn parse_iso(s: &str) -> Result<DateTime<Utc>, String> {
-    DateTime::parse_from_rfc3339(s)
-        .map(|dt| dt.with_timezone(&Utc))
-        .map_err(|e| e.to_string())
+    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+        return Ok(dt.with_timezone(&Utc));
+    }
+    if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.fZ") {
+        return Ok(DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc));
+    }
+    if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.f") {
+        return Ok(DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc));
+    }
+    if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S") {
+        return Ok(DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc));
+    }
+    Err(format!("invalid iso8601 datetime: {s}"))
 }

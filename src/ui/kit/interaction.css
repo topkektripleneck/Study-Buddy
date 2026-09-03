@@ -2,6 +2,7 @@
 
 /* Press feedback: respond on pointer-down, not release */
 .sb-pressable {
+  cursor: pointer;
   transition:
     transform var(--sb-duration-press) var(--sb-ease-out),
     box-shadow var(--sb-duration-fast) var(--sb-ease-out),
@@ -10,14 +11,87 @@
     color var(--sb-duration-fast) var(--sb-ease-out);
 }
 
-.sb-pressable:active {
+.sb-pressable:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.sb-error-banner {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: var(--sb-radius-sm);
+  background: rgba(255, 100, 100, 0.12);
+  color: var(--sb-error);
+  font-size: 13px;
+}
+
+.sb-warn-banner {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--sb-warn);
+}
+
+.sb-tab-panel[hidden] {
+  display: none;
+}
+
+.sb-surface {
+  background: var(--sb-surface-bg, var(--sb-bg-raised));
+  border: 1px solid var(--sb-border-subtle);
+  transition: border-color var(--sb-duration-fast) var(--sb-ease-out),
+              box-shadow var(--sb-duration-fast) var(--sb-ease-out);
+}
+
+.sb-surface--base {
+  --sb-surface-bg: var(--sb-bg-base);
+}
+
+.sb-surface--raised {
+  --sb-surface-bg: var(--sb-bg-raised);
+}
+
+.sb-surface--overlay {
+  --sb-surface-bg: var(--sb-bg-overlay);
+}
+
+.sb-glow-border__inner {
+  background: transparent;
+  border-radius: inherit;
+}
+
+.sb-glow-border__inner:not(:has(.sb-surface)) {
+  background: var(--sb-glow-inner-bg, var(--sb-bg-raised));
+}
+
+/* Glassmorphic dashboard widget cards */
+.sb-widgets-grid .sb-surface {
+  --sb-surface-bg: color-mix(in srgb, var(--sb-bg-raised) 38%, transparent);
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    0 10px 32px -6px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .sb-widgets-grid .sb-surface {
+    --sb-surface-bg: var(--sb-bg-raised);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.sb-pressable:active:not(:disabled) {
   transform: scale(0.97);
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .sb-pressable-hover:hover {
+  .sb-pressable-hover:hover,
+  button.sb-pressable:hover:not(:disabled) {
     border-color: var(--sb-border-glow);
     color: var(--sb-text-primary);
+    background: var(--sb-bg-overlay);
   }
 }
 
@@ -82,9 +156,33 @@
   font-size: 12px;
 }
 
-/* Command bar: keyboard-initiated — no enter/exit motion (Emil) */
+/* Command bar — full-width bottom dock */
+.sb-command-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+}
+
+.sb-command-bar {
+  border-top: 1px solid var(--sb-material-border);
+  border-radius: 0;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);
+}
+
+.sb-command-bar-active {
+  border-top-color: var(--sb-border-glow);
+  box-shadow: 0 -4px 32px var(--sb-glow-accent);
+}
+
 .sb-command-panel {
   transform-origin: bottom center;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -92,7 +190,7 @@
     transition: opacity var(--sb-duration-fast) ease;
   }
 
-  .sb-pressable:active {
+  .sb-pressable:active:not(:disabled) {
     transform: none;
     opacity: 0.88;
   }

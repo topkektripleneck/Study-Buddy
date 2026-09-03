@@ -1,17 +1,22 @@
-import type { BlockKind, CalendarTimeBlock, TimeBlockDraft } from "@/types";
+import type {
+  BlockKind,
+  CalendarTimeBlock,
+  TaskItem,
+  TimeBlockDraft,
+} from "@/types";
 
 export const SCHEDULE_HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
 /** Pixel height of one hour row. All timeline geometry is derived from this. */
 export const HOUR_ROW_HEIGHT = 48;
 
-export const BLOCK_KINDS: { value: BlockKind; label: string; color: string }[] = [
-  { value: "focus", label: "Focus", color: "accent" },
-  { value: "break", label: "Break", color: "success" },
-  { value: "grounding", label: "Grounding", color: "warm" },
+export const BLOCK_KINDS: { value: BlockKind; label: string; color: BlockKind }[] = [
+  { value: "focus", label: "Focus", color: "focus" },
+  { value: "break", label: "Break", color: "break" },
+  { value: "grounding", label: "Grounding", color: "grounding" },
   { value: "admin", label: "Admin", color: "admin" },
-  { value: "milestone", label: "Milestone", color: "accent" },
-  { value: "buffer", label: "Buffer", color: "warm" },
+  { value: "milestone", label: "Milestone", color: "milestone" },
+  { value: "buffer", label: "Buffer", color: "buffer" },
 ];
 
 function hour12(hour: number): { h: number; suffix: "am" | "pm" } {
@@ -45,8 +50,13 @@ function blockTimes(
 
 export function createTimeBlock(input: TimeBlockDraft): CalendarTimeBlock {
   const now = new Date().toISOString();
-  const { startAt, endAt } = blockTimes(input.hour, input.minute, input.durationMinutes);
-  const colorToken = BLOCK_KINDS.find((k) => k.value === input.kind)?.color ?? "accent";
+  const { startAt, endAt } = blockTimes(
+    input.hour,
+    input.minute,
+    input.durationMinutes,
+    input.localDate,
+  );
+  const colorToken = BLOCK_KINDS.find((k) => k.value === input.kind)?.color ?? "focus";
   return {
     id: crypto.randomUUID(),
     title: input.title.trim(),
@@ -58,13 +68,69 @@ export function createTimeBlock(input: TimeBlockDraft): CalendarTimeBlock {
     kind: input.kind,
     colorToken,
     notes: null,
+    recurrence: input.recurrence ?? null,
+    seriesId: null,
     createdAt: now,
     updatedAt: now,
   };
 }
 
+export function updateTimeBlock(block: CalendarTimeBlock, input: TimeBlockDraft): CalendarTimeBlock {
+  const { startAt, endAt } = blockTimes(
+    input.hour,
+    input.minute,
+    input.durationMinutes,
+    input.localDate,
+  );
+  const colorToken = BLOCK_KINDS.find((k) => k.value === input.kind)?.color ?? block.colorToken;
+  return {
+    ...block,
+    title: input.title.trim(),
+    startAt,
+    endAt,
+    kind: input.kind,
+    colorToken,
+    recurrence: input.recurrence ?? null,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/** Tasks linked to a block via taskId or linkedBlockIds. */
+export function tasksForBlock(block: CalendarTimeBlock, tasks: TaskItem[]): TaskItem[] {
+  return tasks.filter(
+    (t) => t.id === block.taskId || t.linkedBlockIds.includes(block.id),
+  );
+}
+
 export function isSameLocalDay(iso: string, date = new Date()): boolean {
   return new Date(iso).toDateString() === date.toDateString();
+}
+
+/** Monday-start week containing `base`. */
+export function localWeekDates(base = new Date()): Date[] {
+  const day = base.getDay();
+  const mondayOffset = (day + 6) % 7;
+  const monday = new Date(base);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(monday.getDate() - mondayOffset);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+
+export function shiftBlockByMinutes(
+  block: CalendarTimeBlock,
+  deltaMinutes: number,
+): CalendarTimeBlock {
+  const deltaMs = deltaMinutes * 60_000;
+  return {
+    ...block,
+    startAt: new Date(new Date(block.startAt).getTime() + deltaMs).toISOString(),
+    endAt: new Date(new Date(block.endAt).getTime() + deltaMs).toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export interface ClockTime {
@@ -183,4 +249,69 @@ export function blockLayoutPx(
     top: timeOffsetPx(start, startHour),
     height: Math.max((durationMinutes / 60) * HOUR_ROW_HEIGHT, 18),
   };
+}
+
+export interface BlockOverlapLayout {
+  top: number;
+  height: number;
+  column: number;
+  columns: number;
+  widthPct: number;
+  leftPct: number;
+}
+
+/** Side-by-side columns for overlapping blocks on the same day. */
+export function overlapLayouts(
+  blocks: CalendarTimeBlock[],
+  startHour: number,
+): Map<string, BlockOverlapLayout> {
+  const sorted = [...blocks].sort((a, b) => a.startAt.localeCompare(b.startAt));
+  const placements: { block: CalendarTimeBlock; col: number }[] = [];
+  const columnEnds: number[] = [];
+
+  for (const block of sorted) {
+    const start = new Date(block.startAt).getTime();
+    const end = new Date(block.endAt).getTime();
+    let col = columnEnds.findIndex((colEnd) => start >= colEnd);
+    if (col === -1) {
+      col = columnEnds.length;
+      columnEnds.push(end);
+    } else {
+      columnEnds[col] = Math.max(columnEnds[col], end);
+    }
+    placements.push({ block, col });
+  }
+
+  const map = new Map<string, BlockOverlapLayout>();
+  for (const { block, col } of placements) {
+    const start = new Date(block.startAt).getTime();
+    const end = new Date(block.endAt).getTime();
+    const overlapping = placements.filter(({ block: b }) => {
+      const bs = new Date(b.startAt).getTime();
+      const be = new Date(b.endAt).getTime();
+      return bs < end && be > start;
+    });
+    const columns = Math.max(...overlapping.map((p) => p.col), 0) + 1;
+    const layout = blockLayoutPx(block, startHour);
+    map.set(block.id, {
+      ...layout,
+      column: col,
+      columns,
+      widthPct: 100 / columns,
+      leftPct: (col / columns) * 100,
+    });
+  }
+  return map;
+}
+
+export function resizeBlockEnd(
+  block: CalendarTimeBlock,
+  deltaMinutes: number,
+  minMinutes = 15,
+): CalendarTimeBlock {
+  const start = new Date(block.startAt);
+  const end = new Date(block.endAt);
+  const duration = Math.max(minMinutes, (end.getTime() - start.getTime()) / 60_000 + deltaMinutes);
+  const newEnd = new Date(start.getTime() + duration * 60_000);
+  return { ...block, endAt: newEnd.toISOString() };
 }

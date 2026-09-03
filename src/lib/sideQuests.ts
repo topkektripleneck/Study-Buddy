@@ -4,7 +4,7 @@ export interface SideQuest {
   hp: string;
 }
 
-export const SIDE_QUESTS: SideQuest[] = [
+const SIDE_QUESTS: SideQuest[] = [
   { title: "Walk Quest", detail: "5-minute walk outside", hp: "+1 HP" },
   { title: "Hydration Quest", detail: "Drink a full glass of water", hp: "+1 HP" },
   { title: "Stretch Quest", detail: "Light neck and shoulder rolls", hp: "+1 HP" },

@@ -13,21 +13,15 @@ const paddingMap = {
   lg: "var(--sb-space-lg)",
 } as const;
 
-const variantBg: Record<NonNullable<SurfaceProps["variant"]>, string> = {
-  base: "var(--sb-bg-base)",
-  raised: "var(--sb-bg-raised)",
-  overlay: "var(--sb-bg-overlay)",
-};
-
 export function Surface({
   children,
   variant = "raised",
   padding = "md",
   style,
+  className,
   ...props
 }: SurfaceProps) {
   const surfaceStyle: CSSProperties = {
-    background: variantBg[variant],
     borderRadius: "var(--sb-radius-md)",
     border: "1px solid var(--sb-border-subtle)",
     padding: paddingMap[padding],
@@ -35,7 +29,11 @@ export function Surface({
   };
 
   return (
-    <div style={surfaceStyle} {...props}>
+    <div
+      className={["sb-surface", `sb-surface--${variant}`, className].filter(Boolean).join(" ")}
+      style={surfaceStyle}
+      {...props}
+    >
       {children}
     </div>
   );

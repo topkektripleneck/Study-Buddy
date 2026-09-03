@@ -123,7 +123,7 @@ export function EnergyWidget() {
 
 const title = { margin: "0 0 4px", fontSize: "16px" };
 const hint = { margin: "0 0 12px", fontSize: "12px", color: "var(--sb-text-muted)" };
-const errorText = { margin: "0 0 8px", fontSize: "12px", color: "#ffaaaa" };
+const errorText = { margin: "0 0 8px", fontSize: "12px", color: "var(--sb-error)" };
 const chart = {
   display: "flex",
   gap: "8px",

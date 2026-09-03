@@ -15,6 +15,7 @@ type TaskStatus =
   | "archived";
 
 type Priority = "critical" | "high" | "normal" | "low";
+export type { Priority };
 
 type TimerPhase =
   | "idle"
@@ -53,6 +54,13 @@ export interface PendingConflict {
   conflicts: CalendarTimeBlock[];
 }
 
+/** Result from importing a Google Calendar .ics export. */
+export interface CalendarImportResult {
+  imported: number;
+  skipped: number;
+  message: string;
+}
+
 /** Modal form state before conversion to a calendar block. */
 export interface TimeBlockDraft {
   title: string;
@@ -60,6 +68,16 @@ export interface TimeBlockDraft {
   minute: number;
   durationMinutes: number;
   kind: BlockKind;
+  localDate?: Date;
+  recurrence?: BlockRecurrence | null;
+  /** none = no task, new = create on save, otherwise an existing task id */
+  taskLink?: "none" | "new" | Uuid;
+}
+
+export type RecurrenceFrequency = "daily" | "weekly" | "weekdays";
+
+export interface BlockRecurrence {
+  frequency: RecurrenceFrequency;
 }
 
 interface ChecklistItem {
@@ -89,7 +107,7 @@ export interface TaskItem {
   completedAt: Iso8601 | null;
 }
 
-interface EisenhowerQuadrantItem {
+export interface EisenhowerQuadrantItem {
   id: Uuid;
   taskId: Uuid;
   quadrant: EisenhowerQuadrant;
@@ -127,6 +145,8 @@ export interface CalendarTimeBlock {
   kind: BlockKind;
   colorToken: string;
   notes: string | null;
+  recurrence: BlockRecurrence | null;
+  seriesId: Uuid | null;
   createdAt: Iso8601;
   updatedAt: Iso8601;
 }
@@ -148,6 +168,8 @@ export interface ConsistencyMetric {
   lastRecalculatedAt: Iso8601;
 }
 
+import type { ThemeId, ZodiacSign, EightbitPalette } from "@/lib/themes";
+
 export interface AppConfig {
   schemaVersion: number;
   pomodoroFocusMinutes: number;
@@ -160,6 +182,15 @@ export interface AppConfig {
   activeWidgets: string[];
   focusStartChimePath?: string | null;
   focusEndChimePath?: string | null;
+  notifyTimer?: boolean;
+  notifyBlocks?: boolean;
+  notifyQuietHoursEnabled?: boolean;
+  notifyQuietStartHour?: number;
+  notifyQuietEndHour?: number;
+  eightbitPalette?: EightbitPalette;
+  themeId?: ThemeId;
+  zodiacSign?: ZodiacSign;
+  autostart?: boolean;
 }
 
 export interface EnergyLogEntry {
@@ -181,10 +212,22 @@ export interface WidgetLayout {
 
 export function parseWidgetIds(ids: string[]): WidgetId[] {
   const valid = new Set<string>(WIDGET_CATALOG.map((w) => w.id));
-  const aliases: Record<string, WidgetId> = { vent: "journal" };
+  const aliases: Record<string, WidgetId> = { heatmap: "target" };
   return ids
     .map((id) => aliases[id] ?? id)
     .filter((id): id is WidgetId => valid.has(id));
+}
+
+export interface NotifyPayload {
+  kind: "timer" | "block" | "metrics";
+  title: string;
+  body: string;
+  edge?: string;
+  blockId?: string;
+}
+
+export interface AppNotification extends NotifyPayload {
+  id: string;
 }
 
 export interface TimerTickPayload {
@@ -198,31 +241,49 @@ export interface TimerTickPayload {
   phaseIndex: number;
   cycleLength: number;
   discontinuity: Discontinuity;
+  suspendGapMs?: number | null;
+}
+
+export interface TimerRestoreOffer {
+  sessionId: Uuid;
+  phase: TimerPhase;
+  elapsedMs: number;
+  remainingMs: number | null;
+  phaseDurationMs: number | null;
+  protocol: string;
 }
 
 export type MainTab = "widgets" | "schedule" | "matrix";
+
+export type SettingsSection =
+  | "appearance"
+  | "notifications"
+  | "focus"
+  | "schedule"
+  | "windows"
+  | "data";
 
 export type WidgetId =
   | "focus"
   | "clock"
   | "tasks"
-  | "heatmap"
   | "target"
   | "cheatsheet"
   | "breathing"
   | "energy"
-  | "journal";
+  | "journal"
+  | "vent";
 
 export const WIDGET_CATALOG: { id: WidgetId; label: string; description: string }[] = [
   { id: "focus", label: "Focus Timer", description: "Pomodoro and stopwatch" },
   { id: "clock", label: "Current Time", description: "Live clock display" },
   { id: "tasks", label: "Task List", description: "Quick task overview" },
-  { id: "heatmap", label: "Activity Heatmap", description: "Focus consistency grid" },
   { id: "target", label: "Daily Target", description: "Focus progress ring" },
   { id: "cheatsheet", label: "Commands", description: "Command bar reference" },
-  { id: "breathing", label: "Breathe", description: "Box and 4-7-8 guide" },
+  { id: "breathing", label: "Breathe", description: "Box, 4-7-8, and energizing guide" },
   { id: "energy", label: "Energy Logger", description: "Daily energy + side quests" },
-  { id: "journal", label: "Mini-Journal", description: "Timeline notes and reflections" },
+  { id: "journal", label: "Journal", description: "Daily journal entries" },
+  { id: "vent", label: "Vent Corner", description: "Ephemeral — never saved" },
 ];
 
 export const QUADRANT_META: Record<

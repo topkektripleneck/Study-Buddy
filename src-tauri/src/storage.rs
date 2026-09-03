@@ -10,7 +10,8 @@ use crate::error::AppError;
 use crate::models::{
     ActivityLogRecord, AppConfig, CalendarTimeBlock, ConsistencyMetric, DailyFocus,
     EisenhowerMatrixFile, EnergyLogEntry, EnergyLogFile, JournalEntry, JournalFile, SchemaFile,
-    TaskItem, TimerSession, WidgetLayout, new_uuid, now_iso,
+    TaskItem, TimerSession, WidgetLayout, default_eightbit_palette, default_theme_id,
+    default_zodiac_sign, new_uuid, now_iso,
 };
 
 const SCHEMA_VERSION: u32 = 1;
@@ -49,6 +50,151 @@ impl StorageEngine {
         self.init_if_missing("layout/main.json", &default_layout())?;
         self.init_if_missing("energy.json", &default_energy())?;
         self.init_if_missing("journal/entries.json", &default_journal())?;
+        self.migrate_schema()?;
+        Ok(())
+    }
+
+    /// Bump `schema.json` and run versioned migrations when the app outpaces saved data.
+    fn migrate_schema(&self) -> Result<(), AppError> {
+        let mut schema: SchemaFile = self
+            .read_json("schema.json")
+            .unwrap_or_else(|_| default_schema());
+        if schema.schema_version >= SCHEMA_VERSION {
+            return Ok(());
+        }
+        // ponytail: add file-level migrations here when SCHEMA_VERSION increments
+        schema.schema_version = SCHEMA_VERSION;
+        schema.app_version = env!("CARGO_PKG_VERSION").to_string();
+        self.write_atomic("schema.json", &schema)?;
+        Ok(())
+    }
+
+    /// Zip the data directory for manual backup. Skips `backups/` and temp files.
+    pub fn export_zip(&self, dest: &Path) -> Result<(), AppError> {
+        use zip::write::SimpleFileOptions;
+        use zip::ZipWriter;
+
+        let file = File::create(dest)
+            .map_err(|e| AppError::Storage(format!("create zip {}: {e}", dest.display())))?;
+        let mut zip = ZipWriter::new(file);
+        let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        self.write_dir_to_zip(&mut zip, &self.root, "", options)?;
+        zip.finish()
+            .map_err(|e| AppError::Storage(format!("finish zip: {e}")))?;
+        Ok(())
+    }
+
+    /// Restore data from an export zip. Saves current data to `backups/pre-restore-*.zip` first.
+    pub fn import_zip(&self, src: &Path) -> Result<String, AppError> {
+        use std::io::Read;
+        use zip::read::ZipArchive;
+
+        let stamp = Local::now().format("%Y%m%d-%H%M%S");
+        let pre_backup = self
+            .root
+            .join("backups")
+            .join(format!("pre-restore-{stamp}.zip"));
+        if let Some(parent) = pre_backup.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| AppError::Storage(format!("mkdir backups: {e}")))?;
+        }
+        self.export_zip(&pre_backup)?;
+
+        let file = File::open(src)
+            .map_err(|e| AppError::Storage(format!("open backup {}: {e}", src.display())))?;
+        let mut archive = ZipArchive::new(file)
+            .map_err(|e| AppError::Storage(format!("read zip {}: {e}", src.display())))?;
+
+        let names: Vec<String> = archive
+            .file_names()
+            .filter_map(normalize_zip_path)
+            .filter(|rel| {
+                !rel.is_empty()
+                    && rel != "backups"
+                    && !rel.starts_with("backups/")
+                    && !rel.ends_with(".zip")
+            })
+            .collect();
+        if !names.iter().any(|rel| rel == "schema.json") {
+            return Err(AppError::InvalidInput(
+                "not a Study Buddy backup (missing schema.json)".into(),
+            ));
+        }
+
+        for i in 0..archive.len() {
+            let mut entry = archive
+                .by_index(i)
+                .map_err(|e| AppError::Storage(format!("zip entry {i}: {e}")))?;
+            let Some(rel) = normalize_zip_path(entry.name()) else {
+                return Err(AppError::InvalidInput(format!(
+                    "unsafe path in backup: {}",
+                    entry.name()
+                )));
+            };
+            if rel.is_empty() || rel == "backups" || rel.starts_with("backups/") || rel.ends_with(".zip") {
+                continue;
+            }
+            if entry.is_dir() {
+                continue;
+            }
+            let dest = self.root.join(&rel);
+            if let Some(parent) = dest.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| AppError::Storage(format!("mkdir {}: {e}", parent.display())))?;
+            }
+            let mut raw = Vec::new();
+            entry
+                .read_to_end(&mut raw)
+                .map_err(|e| AppError::Storage(format!("read zip {rel}: {e}")))?;
+            if rel.ends_with(".json") {
+                serde_json::from_slice::<serde_json::Value>(&raw).map_err(|e| {
+                    AppError::InvalidInput(format!("invalid JSON in backup at {rel}: {e}"))
+                })?;
+            }
+            fs::write(&dest, &raw)
+                .map_err(|e| AppError::Storage(format!("write {}: {e}", dest.display())))?;
+        }
+
+        self.migrate_schema()?;
+        Ok(pre_backup
+            .strip_prefix(&self.root)
+            .unwrap_or(&pre_backup)
+            .to_string_lossy()
+            .into_owned())
+    }
+
+    fn write_dir_to_zip(
+        &self,
+        zip: &mut zip::ZipWriter<File>,
+        dir: &Path,
+        prefix: &str,
+        options: zip::write::SimpleFileOptions,
+    ) -> Result<(), AppError> {
+        for entry in fs::read_dir(dir)
+            .map_err(|e| AppError::Storage(format!("read dir {}: {e}", dir.display())))?
+        {
+            let entry = entry.map_err(|e| AppError::Storage(format!("dir entry: {e}")))?;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name == "backups" || name.ends_with(".tmp") || name.ends_with(".zip") {
+                continue;
+            }
+            let path = entry.path();
+            let zip_path = if prefix.is_empty() {
+                name.clone()
+            } else {
+                format!("{prefix}/{name}")
+            };
+            if path.is_dir() {
+                self.write_dir_to_zip(zip, &path, &zip_path, options)?;
+            } else {
+                zip.start_file(&zip_path, options)
+                    .map_err(|e| AppError::Storage(format!("zip start {zip_path}: {e}")))?;
+                let mut file = File::open(&path)
+                    .map_err(|e| AppError::Storage(format!("open {}: {e}", path.display())))?;
+                std::io::copy(&mut file, zip)
+                    .map_err(|e| AppError::Storage(format!("zip write {zip_path}: {e}")))?;
+            }
+        }
         Ok(())
     }
 
@@ -67,7 +213,33 @@ impl StorageEngine {
         }
         let raw = fs::read_to_string(&path)
             .map_err(|e| AppError::Storage(format!("read {rel}: {e}")))?;
-        serde_json::from_str(&raw).map_err(|e| AppError::Storage(format!("parse {rel}: {e}")))
+        match serde_json::from_str(&raw) {
+            Ok(value) => Ok(value),
+            Err(parse_err) => {
+                if let Some(restored) = self.read_from_newest_backup(rel) {
+                    return Ok(restored);
+                }
+                Err(AppError::Storage(format!("parse {rel}: {parse_err}")))
+            }
+        }
+    }
+
+    fn read_from_newest_backup<T: DeserializeOwned>(&self, rel: &str) -> Option<T> {
+        let backups = self.root.join("backups");
+        let mut entries: Vec<_> = fs::read_dir(&backups).ok()?.flatten().collect();
+        entries.sort_by_key(|e| e.file_name());
+        let backup_name = rel.replace('/', "_");
+        for entry in entries.into_iter().rev() {
+            let candidate = entry.path().join(&backup_name);
+            if !candidate.exists() {
+                continue;
+            }
+            let raw = fs::read_to_string(&candidate).ok()?;
+            if let Ok(value) = serde_json::from_str(&raw) {
+                return Some(value);
+            }
+        }
+        None
     }
 
     pub fn write_atomic<T: Serialize + ?Sized>(&self, rel: &str, value: &T) -> Result<(), AppError> {
@@ -305,7 +477,7 @@ impl StorageEngine {
     pub fn journal_add(&self, text: &str) -> Result<JournalEntry, AppError> {
         let trimmed = text.trim();
         if trimmed.is_empty() {
-            return Err(AppError::Storage("journal entry cannot be empty".into()));
+            return Err(AppError::InvalidInput("entry cannot be empty".into()));
         }
         let mut file = self.read_journal()?;
         let entry = JournalEntry {
@@ -326,6 +498,65 @@ impl StorageEngine {
             return Err(AppError::NotFound(entry_id.to_string()));
         }
         self.write_atomic("journal/entries.json", &file)
+    }
+
+    pub fn reset_tasks(&self) -> Result<(), AppError> {
+        self.write_tasks(&[])?;
+        let mut blocks = self.read_calendar()?;
+        let mut blocks_changed = false;
+        for block in &mut blocks {
+            if block.task_id.is_some() {
+                block.task_id = None;
+                block.updated_at = now_iso();
+                blocks_changed = true;
+            }
+        }
+        if blocks_changed {
+            self.write_calendar(&blocks)?;
+        }
+        self.write_matrix(&default_matrix())
+    }
+
+    pub fn reset_calendar(&self) -> Result<(), AppError> {
+        self.write_calendar(&[])
+    }
+
+    pub fn reset_matrix(&self) -> Result<(), AppError> {
+        self.write_matrix(&default_matrix())
+    }
+
+    pub fn reset_layout(&self) -> Result<(), AppError> {
+        self.write_layout(&default_layout())
+    }
+
+    pub fn reset_journal(&self) -> Result<(), AppError> {
+        self.write_atomic("journal/entries.json", &default_journal())
+    }
+
+    pub fn reset_energy(&self) -> Result<(), AppError> {
+        self.write_atomic("energy.json", &default_energy())
+    }
+
+    pub fn clear_activity_logs(&self) -> Result<(), AppError> {
+        let activity_dir = self.root.join("activity");
+        if !activity_dir.exists() {
+            return Ok(());
+        }
+        for entry in fs::read_dir(&activity_dir).map_err(|e| AppError::Storage(e.to_string()))? {
+            let entry = entry.map_err(|e| AppError::Storage(e.to_string()))?;
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
+                fs::remove_file(&path).map_err(|e| AppError::Storage(e.to_string()))?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn reset_metrics(&self) -> Result<ConsistencyMetric, AppError> {
+        self.clear_activity_logs()?;
+        let metrics = default_metrics();
+        self.write_metrics(&metrics)?;
+        Ok(metrics)
     }
 
     pub fn import_chime(&self, source: &str, slot: &str) -> Result<String, AppError> {
@@ -371,6 +602,18 @@ impl StorageEngine {
     }
 }
 
+fn normalize_zip_path(name: &str) -> Option<String> {
+    let rel = name
+        .replace('\\', "/")
+        .trim()
+        .trim_end_matches('/')
+        .to_string();
+    if rel.is_empty() || rel.contains("..") || rel.starts_with('/') {
+        return None;
+    }
+    Some(rel)
+}
+
 fn activity_file_for(local_date: &str) -> String {
     let month = local_date.get(..7).unwrap_or(local_date);
     format!("activity/{month}.json")
@@ -394,9 +637,18 @@ fn default_config() -> AppConfig {
         hud_auto_show_on_session_start: true,
         colored_time_blocks: true,
         prompt_task_on_block_create: true,
+        notify_timer: true,
+        notify_blocks: true,
+        theme_id: default_theme_id(),
+        zodiac_sign: default_zodiac_sign(),
         active_widgets: vec!["focus".to_string(), "clock".to_string()],
         focus_start_chime_path: None,
         focus_end_chime_path: None,
+        notify_quiet_hours_enabled: false,
+        notify_quiet_start_hour: 22,
+        notify_quiet_end_hour: 8,
+        eightbit_palette: default_eightbit_palette(),
+        autostart: false,
     }
 }
 
@@ -513,5 +765,36 @@ mod tests {
         ] {
             assert!(dir.path().join(file).exists(), "missing {file}");
         }
+    }
+
+    #[test]
+    fn export_import_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = StorageEngine::new(dir.path().to_path_buf()).unwrap();
+        storage
+            .write_tasks(&[sample_task("t1", "backup me")])
+            .unwrap();
+        let zip_path = dir.path().join("out.zip");
+        storage.export_zip(&zip_path).unwrap();
+
+        storage
+            .write_tasks(&[sample_task("t2", "replaced")])
+            .unwrap();
+        storage.import_zip(&zip_path).unwrap();
+
+        let loaded: Vec<TaskItem> = storage.read_json("tasks.json").unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].title, "backup me");
+    }
+
+    #[test]
+    fn import_rejects_bad_zip() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = StorageEngine::new(dir.path().to_path_buf()).unwrap();
+        let zip_path = dir.path().join("bad.zip");
+        storage.export_zip(&zip_path).unwrap();
+        // Corrupt schema marker by writing a non-backup zip — use empty file
+        fs::write(&zip_path, b"not a zip").unwrap();
+        assert!(storage.import_zip(&zip_path).is_err());
     }
 }

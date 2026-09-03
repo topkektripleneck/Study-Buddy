@@ -10,7 +10,7 @@ use tauri::{AppHandle, Emitter};
 use crate::error::AppError;
 use crate::models::{
     new_uuid, now_iso, parse_iso, ActivityKind, ActivityLogRecord, AppConfig, Discontinuity,
-    TimerPhase, TimerRunState, TimerSession, TimerTickPayload,
+    TimerPhase, TimerRestoreOffer, TimerRunState, TimerSession, TimerTickPayload,
 };
 use crate::storage::StorageEngine;
 
@@ -39,31 +39,116 @@ pub struct TimerActor {
 
 struct TimerInner {
     session: Option<TimerSession>,
+    pending_restore: Option<TimerSession>,
+    suspend_notice_ms: Option<u64>,
     config: AppConfig,
 }
 
 impl TimerActor {
     pub fn new(storage: Arc<StorageEngine>, app: AppHandle, config: AppConfig) -> Arc<Self> {
-        let mut restored = storage.read_session().ok().flatten();
-        if let Some(session) = restored.as_mut() {
-            session.anchor_mono_ms = mono_ms();
-        }
+        let restored = storage.read_session().ok().flatten();
+        let (session, pending_restore) = match restored {
+            Some(s) if s.phase != TimerPhase::Idle => (None, Some(s)),
+            Some(_) => {
+                let _ = storage.clear_session();
+                (None, None)
+            }
+            None => (None, None),
+        };
 
         let actor = Arc::new(Self {
             storage: storage.clone(),
             app: app.clone(),
             inner: Mutex::new(TimerInner {
-                session: restored,
+                session,
+                pending_restore,
+                suspend_notice_ms: None,
                 config,
             }),
             subscribers: Mutex::new(vec![]),
             last_checkpoint: Mutex::new(Instant::now()),
         });
 
+        if let Some(offer) = actor.restore_offer() {
+            let _ = app.emit("timer:restore-pending", &offer);
+        }
+
         let tick_actor = actor.clone();
         thread::spawn(move || tick_actor.tick_loop());
 
         actor
+    }
+
+    fn restore_offer(&self) -> Option<TimerRestoreOffer> {
+        let inner = self.inner.lock();
+        let session = inner.pending_restore.as_ref()?;
+        let elapsed_ms = session_elapsed_ms(session);
+        Some(TimerRestoreOffer {
+            session_id: session.session_id.clone(),
+            phase: session.phase,
+            elapsed_ms,
+            remaining_ms: session
+                .phase_duration_ms
+                .map(|d| d.saturating_sub(elapsed_ms)),
+            phase_duration_ms: session.phase_duration_ms,
+            protocol: session.protocol.clone(),
+        })
+    }
+
+    pub fn get_pending_restore(&self) -> Option<TimerRestoreOffer> {
+        self.restore_offer()
+    }
+
+    /// Re-read session and config from disk after a backup restore.
+    pub fn reload_from_storage(&self) -> Result<(), AppError> {
+        let restored = self.storage.read_session().ok().flatten();
+        let config = self.storage.read_config()?;
+        let (session, pending_restore) = match restored {
+            Some(s) if s.phase != TimerPhase::Idle => (None, Some(s)),
+            Some(_) => {
+                let _ = self.storage.clear_session();
+                (None, None)
+            }
+            None => (None, None),
+        };
+        {
+            let mut inner = self.inner.lock();
+            inner.session = session;
+            inner.pending_restore = pending_restore;
+            inner.suspend_notice_ms = None;
+            inner.config = config;
+        }
+        if let Some(offer) = self.restore_offer() {
+            let _ = self.app.emit("timer:restore-pending", &offer);
+        }
+        Ok(())
+    }
+
+    pub fn confirm_restore(&self) -> Result<TimerTickPayload, AppError> {
+        let mut inner = self.inner.lock();
+        let mut session = inner
+            .pending_restore
+            .take()
+            .ok_or_else(|| AppError::Timer("no session to restore".into()))?;
+        session.run_state = TimerRunState::Paused;
+        session.paused_at = Some(now_iso());
+        session.anchor_mono_ms = mono_ms();
+        inner.session = Some(session);
+        drop(inner);
+        self.persist_session()?;
+        self.compute_tick(false)
+            .ok_or_else(|| AppError::Timer("no tick".into()))
+    }
+
+    pub fn discard_restore(&self) -> Result<(), AppError> {
+        self.inner.lock().pending_restore = None;
+        self.storage.clear_session()?;
+        Ok(())
+    }
+
+    pub fn ack_suspend(&self) -> Result<TimerTickPayload, AppError> {
+        self.inner.lock().suspend_notice_ms = None;
+        self.resume()
     }
 
     pub fn subscribe(&self, channel: Channel<TimerTickPayload>) {
@@ -87,6 +172,7 @@ impl TimerActor {
         duration_minutes: Option<u32>,
     ) -> Result<TimerTickPayload, AppError> {
         let mut inner = self.inner.lock();
+        inner.pending_restore = None;
         let config = inner.config.clone();
         let protocol = protocol.unwrap_or_else(|| "pomodoro".to_string());
         let phase = if protocol == "stopwatch" {
@@ -96,7 +182,7 @@ impl TimerActor {
         };
 
         let custom_focus_ms = match duration_minutes {
-            Some(m) if m == 0 => return Err(AppError::InvalidInput("duration must be > 0".into())),
+            Some(0) => return Err(AppError::InvalidInput("duration must be > 0".into())),
             Some(m) => Some(m as u64 * 60_000),
             None => None,
         };
@@ -266,6 +352,8 @@ impl TimerActor {
     pub fn refresh_metrics(&self) {
         if let Ok(metric) = crate::metrics::recalculate(&self.storage) {
             let _ = self.app.emit("metrics:changed", &metric);
+            let config = self.inner.lock().config.clone();
+            crate::notify::poll_metrics_notifications(self.app(), &config, &metric);
         }
     }
 
@@ -273,14 +361,91 @@ impl TimerActor {
         self.inner.lock().config = config;
     }
 
+    /// Final checkpoint before process exit.
+    pub fn flush(&self) {
+        let _ = self.persist_session();
+    }
+
     fn tick_loop(self: Arc<Self>) {
         loop {
             thread::sleep(Duration::from_millis(200));
+            self.maybe_heal_suspend();
             if let Some(tick) = self.compute_tick(true) {
                 let _ = self.push_tick(&tick);
                 self.maybe_checkpoint();
                 self.check_phase_completion(&tick);
             }
+            self.maybe_poll_blocks();
+            self.maybe_poll_metrics();
+        }
+    }
+
+    /// Wall-clock gaps from sleep/suspend are excluded from elapsed time.
+    fn maybe_heal_suspend(&self) {
+        let mut inner = self.inner.lock();
+        let gap = {
+            let Some(session) = inner.session.as_mut() else {
+                return;
+            };
+            if session.run_state != TimerRunState::Running {
+                return;
+            }
+            let Ok(anchor) = parse_iso(&session.anchor_at) else {
+                return;
+            };
+            let wall_ms = (Utc::now() - anchor).num_milliseconds().max(0) as u64;
+            let mono_delta = mono_ms().saturating_sub(session.anchor_mono_ms);
+            let adjusted_wall = wall_ms.saturating_sub(session.accumulated_pause_ms);
+            if adjusted_wall > mono_delta.saturating_add(2_000) {
+                let gap = adjusted_wall - mono_delta;
+                session.accumulated_pause_ms += gap;
+                session.run_state = TimerRunState::Paused;
+                session.paused_at = Some(now_iso());
+                Some(gap)
+            } else {
+                None
+            }
+        };
+        if let Some(gap) = gap {
+            inner.suspend_notice_ms = Some(gap);
+        }
+    }
+
+    fn maybe_poll_blocks(&self) {
+        static LAST: OnceLock<Mutex<Instant>> = OnceLock::new();
+        let last = LAST.get_or_init(|| Mutex::new(Instant::now() - Duration::from_secs(10)));
+        {
+            let mut guard = last.lock();
+            if guard.elapsed() < Duration::from_millis(1_000) {
+                return;
+            }
+            *guard = Instant::now();
+        }
+        let config = self.inner.lock().config.clone();
+        if !config.notify_blocks {
+            return;
+        }
+        let blocks = match self.storage.read_calendar() {
+            Ok(blocks) => blocks,
+            Err(_) => return,
+        };
+        crate::notify::poll_block_notifications(self.app(), &config, &blocks);
+    }
+
+    fn maybe_poll_metrics(&self) {
+        static LAST: OnceLock<Mutex<Instant>> = OnceLock::new();
+        let last = LAST.get_or_init(|| Mutex::new(Instant::now() - Duration::from_secs(120)));
+        {
+            let mut guard = last.lock();
+            if guard.elapsed() < Duration::from_secs(60) {
+                return;
+            }
+            *guard = Instant::now();
+        }
+        let config = self.inner.lock().config.clone();
+        if let Ok(metric) = crate::metrics::recalculate(&self.storage) {
+            let _ = self.app.emit("metrics:changed", &metric);
+            crate::notify::poll_metrics_notifications(self.app(), &config, &metric);
         }
     }
 
@@ -329,6 +494,7 @@ impl TimerActor {
             phase_index: session.phase_index,
             cycle_length: session.cycle_length,
             discontinuity,
+            suspend_gap_ms: inner.suspend_notice_ms,
         })
     }
 
@@ -350,6 +516,7 @@ impl TimerActor {
             phase_index: 0,
             cycle_length: 4,
             discontinuity: Discontinuity::None,
+            suspend_gap_ms: None,
         };
         let _ = self.push_tick(&idle);
     }
@@ -363,13 +530,18 @@ impl TimerActor {
     }
 
     fn emit_phase(&self, from: Option<TimerPhase>, to: TimerPhase) {
-        let (session_id, duration_ms) = {
+        let (session_id, duration_ms, config) = {
             let inner = self.inner.lock();
+            let config = inner.config.clone();
             match inner.session.as_ref() {
-                Some(s) => (s.session_id.clone(), s.phase_duration_ms),
-                None => (String::new(), None),
+                Some(s) => (s.session_id.clone(), s.phase_duration_ms, config),
+                None => (String::new(), None, config),
             }
         };
+
+        if let Some(from_phase) = from {
+            crate::notify::notify_timer_phase(self.app(), &config, from_phase, to);
+        }
 
         let _ = self.app.emit(
             "timer:phase",
@@ -428,7 +600,9 @@ fn next_phase(config: &AppConfig, session: &TimerSession) -> TimerPhase {
     match session.phase {
         TimerPhase::Focus => {
             let cycle = config.pomodoro_cycle_length.max(1);
-            if (session.phase_index + 1) % cycle == 0 {
+            // phase_index increments on every transition; focus phases sit on even indices.
+            let focus_completed = session.phase_index / 2 + 1;
+            if focus_completed.is_multiple_of(cycle) {
                 TimerPhase::LongBreak
             } else {
                 TimerPhase::ShortBreak
@@ -437,5 +611,96 @@ fn next_phase(config: &AppConfig, session: &TimerSession) -> TimerPhase {
         TimerPhase::ShortBreak | TimerPhase::LongBreak => TimerPhase::Focus,
         TimerPhase::Stopwatch => TimerPhase::Stopwatch,
         TimerPhase::Idle => TimerPhase::Focus,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{AppConfig, TimerPhase, TimerRestoreOffer, TimerRunState, TimerSession};
+
+    fn sample_session(phase: TimerPhase, phase_index: u32) -> TimerSession {
+        TimerSession {
+            session_id: "s".into(),
+            phase,
+            run_state: TimerRunState::Running,
+            anchor_at: now_iso(),
+            anchor_mono_ms: 0,
+            accumulated_pause_ms: 0,
+            paused_at: None,
+            phase_duration_ms: Some(25 * 60_000),
+            phase_index,
+            cycle_length: 4,
+            protocol: "pomodoro".into(),
+            custom_focus_ms: None,
+        }
+    }
+
+    #[test]
+    fn suspend_heal_adds_gap_once() {
+        fn heal_delta(wall_ms: u64, mono_delta: u64, accumulated_pause_ms: u64) -> Option<u64> {
+            let adjusted_wall = wall_ms.saturating_sub(accumulated_pause_ms);
+            if adjusted_wall > mono_delta.saturating_add(2_000) {
+                Some(adjusted_wall - mono_delta)
+            } else {
+                None
+            }
+        }
+
+        let wall = 3_600_000u64;
+        let mono = 300_000u64;
+        assert_eq!(heal_delta(wall, mono, 0), Some(wall - mono));
+        let accumulated = wall - mono;
+        assert_eq!(heal_delta(wall + 200, mono + 200, accumulated), None);
+    }
+
+    #[test]
+    fn restore_offer_from_active_session() {
+        let session = sample_session(TimerPhase::Focus, 0);
+        let elapsed = session_elapsed_ms(&session);
+        let offer = TimerRestoreOffer {
+            session_id: session.session_id.clone(),
+            phase: session.phase,
+            elapsed_ms: elapsed,
+            remaining_ms: session.phase_duration_ms.map(|d| d.saturating_sub(elapsed)),
+            phase_duration_ms: session.phase_duration_ms,
+            protocol: session.protocol.clone(),
+        };
+        assert_eq!(offer.phase, TimerPhase::Focus);
+        assert!(offer.remaining_ms.unwrap_or(0) <= 25 * 60_000);
+    }
+
+    #[test]
+    fn long_break_after_fourth_focus() {
+        let config = AppConfig {
+            schema_version: 1,
+            pomodoro_focus_minutes: 25,
+            pomodoro_short_break_minutes: 5,
+            pomodoro_long_break_minutes: 15,
+            pomodoro_cycle_length: 4,
+            hud_auto_show_on_session_start: true,
+            colored_time_blocks: true,
+            prompt_task_on_block_create: true,
+            notify_timer: true,
+            notify_blocks: true,
+            theme_id: "galaxy".into(),
+            zodiac_sign: "leo".into(),
+            active_widgets: vec![],
+            focus_start_chime_path: None,
+            focus_end_chime_path: None,
+            notify_quiet_hours_enabled: false,
+            notify_quiet_start_hour: 22,
+            notify_quiet_end_hour: 8,
+            eightbit_palette: "green".into(),
+            autostart: false,
+        };
+        assert_eq!(
+            next_phase(&config, &sample_session(TimerPhase::Focus, 6)),
+            TimerPhase::LongBreak
+        );
+        assert_eq!(
+            next_phase(&config, &sample_session(TimerPhase::Focus, 0)),
+            TimerPhase::ShortBreak
+        );
     }
 }

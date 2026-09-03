@@ -1,7 +1,8 @@
-import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useEffect } from "react";
 import { api } from "@/lib/api";
 import { playChime } from "@/lib/chimes";
+import { safeListen } from "@/lib/safeListen";
 
 interface TimerPhaseEvent {
   from?: string | null;
@@ -10,6 +11,8 @@ interface TimerPhaseEvent {
 
 export function useChimes() {
   useEffect(() => {
+    if (getCurrentWebviewWindow().label !== "main") return;
+
     let config = { focusStartChimePath: null as string | null, focusEndChimePath: null as string | null };
     api.configGet().then((c) => {
       config = {
@@ -18,7 +21,7 @@ export function useChimes() {
       };
     });
 
-    const unlistenConfig = listen("config:changed", () => {
+    const offConfig = safeListen("config:changed", () => {
       api.configGet().then((c) => {
         config = {
           focusStartChimePath: c.focusStartChimePath ?? null,
@@ -27,7 +30,7 @@ export function useChimes() {
       });
     });
 
-    const unlistenPhase = listen<TimerPhaseEvent>("timer:phase", (event) => {
+    const offPhase = safeListen<TimerPhaseEvent>("timer:phase", (event) => {
       const { from, to } = event.payload;
       if (to === "focus") {
         void playChime(config.focusStartChimePath);
@@ -37,8 +40,8 @@ export function useChimes() {
     });
 
     return () => {
-      unlistenConfig.then((u) => u());
-      unlistenPhase.then((u) => u());
+      offConfig();
+      offPhase();
     };
   }, []);
 }

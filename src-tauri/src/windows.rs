@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 use crate::error::AppError;
 
@@ -26,8 +26,29 @@ impl WindowManager {
                 "#/hud",
                 WindowProfile::Hud,
             ),
+            "toast" => Self::show_toast_popup(app),
             other => Err(AppError::Window(format!("Unknown window label: {other}"))),
         }
+    }
+
+    /// Borderless popup for alerts when the main workspace is minimized or hidden.
+    pub fn show_toast_popup(app: &AppHandle) -> Result<(), AppError> {
+        if let Some(window) = app.get_webview_window("toast") {
+            window
+                .show()
+                .map_err(|e| AppError::Window(e.to_string()))?;
+            return Ok(());
+        }
+
+        Self::open_or_create(
+            app,
+            "toast",
+            "Study Buddy",
+            TOAST_WIDTH,
+            TOAST_HEIGHT,
+            "#/toast",
+            WindowProfile::Toast,
+        )
     }
 
     pub fn toggle(app: &AppHandle, label: &str) -> Result<bool, AppError> {
@@ -101,6 +122,15 @@ impl WindowManager {
         profile: WindowProfile,
     ) -> Result<(), AppError> {
         if app.get_webview_window(label).is_some() {
+            if matches!(profile, WindowProfile::Toast) {
+                let window = app
+                    .get_webview_window(label)
+                    .ok_or_else(|| AppError::Window(format!("Window '{label}' missing")))?;
+                window
+                    .show()
+                    .map_err(|e| AppError::Window(e.to_string()))?;
+                return Ok(());
+            }
             return Self::focus(app, label);
         }
 
@@ -122,27 +152,54 @@ impl WindowManager {
                     .transparent(true)
                     .shadow(false);
             }
+            WindowProfile::Toast => {
+                builder = builder
+                    .decorations(false)
+                    .resizable(false)
+                    .always_on_top(true)
+                    .skip_taskbar(true)
+                    .transparent(true)
+                    .shadow(false)
+                    .focused(false);
+            }
         }
 
         let window = builder
             .build()
             .map_err(|e| AppError::Window(e.to_string()))?;
 
-        // The HUD is borderless and skips the taskbar, so it must land somewhere
-        // predictable or it looks like nothing opened at all.
-        if matches!(profile, WindowProfile::Hud) {
+        if matches!(profile, WindowProfile::Hud | WindowProfile::Toast) {
+            let width = if matches!(profile, WindowProfile::Hud) {
+                HUD_WIDTH
+            } else {
+                TOAST_WIDTH
+            };
             park_top_right(app, &window, width);
-            let app_handle = app.clone();
-            let label = label.to_string();
-            window.on_window_event(move |event| {
-                if matches!(event, tauri::WindowEvent::Destroyed) {
+        }
+
+        let app_handle = app.clone();
+        let window_label = label.to_string();
+        window.on_window_event(move |event| {
+            match event {
+                WindowEvent::CloseRequested { api, .. }
+                    if window_label == "calendar" =>
+                {
+                    api.prevent_close();
+                    let app_handle = app_handle.clone();
+                    let label = window_label.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = WindowManager::close(&app_handle, &label);
+                    });
+                }
+                WindowEvent::Destroyed => {
                     let _ = app_handle.emit(
                         "window:visibility",
-                        serde_json::json!({ "label": label, "open": false }),
+                        serde_json::json!({ "label": window_label, "open": false }),
                     );
                 }
-            });
-        }
+                _ => {}
+            }
+        });
 
         Ok(())
     }
@@ -150,10 +207,13 @@ impl WindowManager {
 
 const HUD_WIDTH: f64 = 420.0;
 const HUD_HEIGHT: f64 = 96.0;
+const TOAST_WIDTH: f64 = 360.0;
+const TOAST_HEIGHT: f64 = 420.0;
 
 enum WindowProfile {
     Calendar,
     Hud,
+    Toast,
 }
 
 fn park_top_right(app: &AppHandle, window: &tauri::WebviewWindow, logical_width: f64) {

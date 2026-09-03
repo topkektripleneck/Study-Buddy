@@ -17,6 +17,7 @@ export function GlowBorder({
   active = false,
   tone = "accent",
   style,
+  className,
   ...props
 }: GlowBorderProps) {
   const glowStyle: CSSProperties = {
@@ -33,13 +34,17 @@ export function GlowBorder({
 
   const innerStyle: CSSProperties = {
     borderRadius: "calc(var(--sb-radius-md) - 1px)",
-    background: "var(--sb-bg-raised)",
-    height: "100%",
   };
 
   return (
-    <div style={glowStyle} {...props}>
-      <div style={innerStyle}>{children}</div>
+    <div
+      className={["sb-glow-border", className].filter(Boolean).join(" ")}
+      style={glowStyle}
+      {...props}
+    >
+      <div className="sb-glow-border__inner" style={innerStyle}>
+        {children}
+      </div>
     </div>
   );
 }

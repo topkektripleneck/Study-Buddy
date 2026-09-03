@@ -1,20 +1,24 @@
 import { ScheduleView } from "@/views/ScheduleView";
+import { ZodiacBackdrop } from "@/components/ZodiacBackdrop";
 import { PressableEnergy } from "@/ui/kit";
 import { openWindow } from "@/lib/windows";
 
 export function CalendarPage() {
   return (
-    <div style={page}>
-      <header style={header}>
-        <div>
-          <p style={eyebrow}>Secondary Window</p>
-          <h1 style={title}>Calendar</h1>
-        </div>
-        <PressableEnergy variant="ghost" onClick={() => openWindow("main")}>
-          Focus Workspace
-        </PressableEnergy>
-      </header>
-      <ScheduleView />
+    <div style={page} className="sb-themed-page">
+      <ZodiacBackdrop />
+      <div className="sb-themed-page__content">
+        <header style={header}>
+          <div>
+            <p style={eyebrow}>Secondary Window</p>
+            <h1 style={title}>Calendar</h1>
+          </div>
+          <PressableEnergy variant="ghost" onClick={() => openWindow("main")}>
+            Focus Workspace
+          </PressableEnergy>
+        </header>
+        <ScheduleView />
+      </div>
     </div>
   );
 }
@@ -22,7 +26,6 @@ export function CalendarPage() {
 const page = {
   minHeight: "100vh",
   padding: "var(--sb-space-lg)",
-  background: "var(--sb-bg-base)",
   overflow: "auto",
 };
 

@@ -1,0 +1,343 @@
+/* Page backgrounds — overridden per theme/sign below */
+
+.sb-main-page,
+.sb-themed-page {
+  background:
+    radial-gradient(ellipse 90% 55% at 20% 0%, rgba(157, 180, 255, 0.08), transparent 50%),
+    radial-gradient(ellipse 70% 45% at 80% 5%, rgba(209, 107, 255, 0.06), transparent 45%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(245, 196, 81, 0.04), transparent 55%),
+    var(--sb-bg-base);
+}
+
+[data-theme="astrology"] .sb-main-page,
+[data-theme="astrology"] .sb-themed-page {
+  background: transparent;
+}
+
+[data-theme="galaxy"] {
+  /* Default palette lives in tokens.css */
+}
+
+/* ── Astrology: per-sign accents + backgrounds ── */
+
+[data-theme="astrology"][data-sign="aries"] {
+  --sb-bg-base: #140706;
+  --sb-bg-raised: #1d0c0a;
+  --sb-bg-overlay: #28100e;
+  --sb-accent: #e5a435;
+  --sb-accent-dim: #943020;
+  --sb-glow-accent: rgba(229, 164, 53, 0.45);
+  --sb-border-glow: rgba(229, 164, 53, 0.32);
+}
+
+[data-theme="astrology"][data-sign="taurus"] {
+  --sb-bg-base: #060e18;
+  --sb-bg-raised: #0b1726;
+  --sb-bg-overlay: #102035;
+  --sb-accent: #d8a838;
+  --sb-accent-dim: #2b5cb8;
+  --sb-glow-accent: rgba(216, 168, 56, 0.45);
+  --sb-border-glow: rgba(216, 168, 56, 0.32);
+}
+
+[data-theme="astrology"][data-sign="gemini"] {
+  --sb-bg-base: #080d1a;
+  --sb-bg-raised: #0e1628;
+  --sb-bg-overlay: #151e36;
+  --sb-accent: #4c8fff;
+  --sb-accent-dim: #c04830;
+  --sb-glow-accent: rgba(76, 143, 255, 0.45);
+  --sb-border-glow: rgba(76, 143, 255, 0.32);
+}
+
+[data-theme="astrology"][data-sign="cancer"] {
+  --sb-bg-base: #070c18;
+  --sb-bg-raised: #0d1526;
+  --sb-bg-overlay: #131d34;
+  --sb-accent: #df5834;
+  --sb-accent-dim: #3260a8;
+  --sb-glow-accent: rgba(223, 88, 52, 0.45);
+  --sb-border-glow: rgba(223, 88, 52, 0.32);
+}
+
+[data-theme="astrology"][data-sign="leo"] {
+  --sb-bg-base: #180806;
+  --sb-bg-raised: #240e0a;
+  --sb-bg-overlay: #30140e;
+  --sb-accent: #f2b32d;
+  --sb-accent-dim: #b8281a;
+  --sb-glow-accent: rgba(242, 179, 45, 0.46);
+  --sb-border-glow: rgba(242, 179, 45, 0.34);
+}
+
+[data-theme="astrology"][data-sign="virgo"] {
+  --sb-bg-base: #090e18;
+  --sb-bg-raised: #101828;
+  --sb-bg-overlay: #182236;
+  --sb-accent: #d89638;
+  --sb-accent-dim: #b84c28;
+  --sb-glow-accent: rgba(216, 150, 56, 0.45);
+  --sb-border-glow: rgba(216, 150, 56, 0.32);
+}
+
+[data-theme="astrology"][data-sign="libra"] {
+  --sb-bg-base: #060e18;
+  --sb-bg-raised: #0b1726;
+  --sb-bg-overlay: #102035;
+  --sb-accent: #dca738;
+  --sb-accent-dim: #2b5cb8;
+  --sb-glow-accent: rgba(220, 167, 56, 0.45);
+  --sb-border-glow: rgba(220, 167, 56, 0.32);
+}
+
+[data-theme="astrology"][data-sign="scorpio"] {
+  --sb-bg-base: #14080a;
+  --sb-bg-raised: #1f0d10;
+  --sb-bg-overlay: #2a1218;
+  --sb-accent: #d49f32;
+  --sb-accent-dim: #a8241b;
+  --sb-glow-accent: rgba(212, 159, 50, 0.45);
+  --sb-border-glow: rgba(212, 159, 50, 0.32);
+}
+
+[data-theme="astrology"][data-sign="sagittarius"] {
+  --sb-bg-base: #180806;
+  --sb-bg-raised: #240e0a;
+  --sb-bg-overlay: #30140e;
+  --sb-accent: #f0ae30;
+  --sb-accent-dim: #ba2818;
+  --sb-glow-accent: rgba(240, 174, 48, 0.46);
+  --sb-border-glow: rgba(240, 174, 48, 0.34);
+}
+
+[data-theme="astrology"][data-sign="capricorn"] {
+  --sb-bg-base: #060e18;
+  --sb-bg-raised: #0b1726;
+  --sb-bg-overlay: #102035;
+  --sb-accent: #d8a838;
+  --sb-accent-dim: #2b5cb8;
+  --sb-glow-accent: rgba(216, 168, 56, 0.45);
+  --sb-border-glow: rgba(216, 168, 56, 0.32);
+}
+
+[data-theme="astrology"][data-sign="aquarius"] {
+  --sb-bg-base: #060d1a;
+  --sb-bg-raised: #0c1628;
+  --sb-bg-overlay: #121e36;
+  --sb-accent: #488eff;
+  --sb-accent-dim: #cca030;
+  --sb-glow-accent: rgba(72, 142, 255, 0.46);
+  --sb-border-glow: rgba(72, 142, 255, 0.34);
+}
+
+[data-theme="astrology"][data-sign="pisces"] {
+  --sb-bg-base: #060d1a;
+  --sb-bg-raised: #0b1626;
+  --sb-bg-overlay: #101f34;
+  --sb-accent: #4a94e8;
+  --sb-accent-dim: #c99c35;
+  --sb-glow-accent: rgba(74, 148, 232, 0.46);
+  --sb-border-glow: rgba(74, 148, 232, 0.34);
+}
+
+/* ── 8-bit: sharp corners, standard fonts, pickable palette ── */
+
+[data-theme="eightbit"] {
+  --sb-bg-base: #0c0c0c;
+  --sb-bg-raised: #1a1a1a;
+  --sb-bg-overlay: #242424;
+  --sb-text-primary: #f0f0f0;
+  --sb-text-secondary: #b0b0b0;
+  --sb-text-muted: #707070;
+  --sb-accent: #00ff88;
+  --sb-accent-dim: #008844;
+  --sb-glow-accent: rgba(0, 255, 136, 0.35);
+  --sb-border-glow: rgba(0, 255, 136, 0.4);
+  --sb-glow-warm: #ffcc00;
+  --sb-glow-success: #00ff88;
+  --sb-border-subtle: #404040;
+  --sb-radius-sm: 0;
+  --sb-radius-md: 0;
+  --sb-radius-lg: 0;
+  --sb-material-bg: #1a1a1a;
+  --sb-material-border: #505050;
+  --sb-material-blur: 0;
+  --sb-material-shadow: 4px 4px 0 #000;
+}
+
+[data-theme="eightbit"][data-eightbit-palette="cyan"] {
+  --sb-accent: #00e5ff;
+  --sb-accent-dim: #008899;
+  --sb-glow-accent: rgba(0, 229, 255, 0.35);
+  --sb-border-glow: rgba(0, 229, 255, 0.4);
+  --sb-glow-success: #00e5ff;
+}
+
+[data-theme="eightbit"][data-eightbit-palette="amber"] {
+  --sb-accent: #ffb000;
+  --sb-accent-dim: #996800;
+  --sb-glow-accent: rgba(255, 176, 0, 0.35);
+  --sb-border-glow: rgba(255, 176, 0, 0.4);
+  --sb-glow-success: #ffb000;
+}
+
+[data-theme="eightbit"][data-eightbit-palette="magenta"] {
+  --sb-accent: #ff44cc;
+  --sb-accent-dim: #992277;
+  --sb-glow-accent: rgba(255, 68, 204, 0.35);
+  --sb-border-glow: rgba(255, 68, 204, 0.4);
+  --sb-glow-success: #ff44cc;
+}
+
+[data-theme="eightbit"] .sb-main-page,
+[data-theme="eightbit"] .sb-themed-page {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(255, 255, 255, 0.015) 2px,
+      rgba(255, 255, 255, 0.015) 4px
+    ),
+    var(--sb-bg-base);
+}
+
+[data-theme="eightbit"][data-eightbit-palette="cyan"] .sb-main-page,
+[data-theme="eightbit"][data-eightbit-palette="cyan"] .sb-themed-page {
+  background:
+    radial-gradient(ellipse 60% 40% at 80% 0%, rgba(0, 229, 255, 0.06), transparent 50%),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 229, 255, 0.03) 2px,
+      rgba(0, 229, 255, 0.03) 4px
+    ),
+    var(--sb-bg-base);
+}
+
+[data-theme="eightbit"][data-eightbit-palette="amber"] .sb-main-page,
+[data-theme="eightbit"][data-eightbit-palette="amber"] .sb-themed-page {
+  background:
+    radial-gradient(ellipse 60% 40% at 20% 0%, rgba(255, 176, 0, 0.06), transparent 50%),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(255, 176, 0, 0.03) 2px,
+      rgba(255, 176, 0, 0.03) 4px
+    ),
+    var(--sb-bg-base);
+}
+
+[data-theme="eightbit"][data-eightbit-palette="magenta"] .sb-main-page,
+[data-theme="eightbit"][data-eightbit-palette="magenta"] .sb-themed-page {
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(255, 68, 204, 0.06), transparent 50%),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(255, 68, 204, 0.03) 2px,
+      rgba(255, 68, 204, 0.03) 4px
+    ),
+    var(--sb-bg-base);
+}
+
+/* Widget + schedule drag handles */
+
+.sb-widget-drag-handle {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--sb-radius-sm);
+  border: 1px solid var(--sb-border-subtle);
+  background: var(--sb-bg-overlay);
+  color: var(--sb-text-muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+  z-index: 2;
+}
+
+.sb-widget-drag-handle:active {
+  cursor: grabbing;
+}
+
+.sb-block-drag-handle {
+  flex-shrink: 0;
+  width: 14px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none;
+  color: inherit;
+  opacity: 0.65;
+  font-size: 10px;
+  user-select: none;
+}
+
+.sb-block-drag-handle:active {
+  cursor: grabbing;
+}
+
+.sb-block-resize-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+@keyframes sb-orb-idle-breathe {
+  0%, 100% {
+    transform: scale(0.74);
+    box-shadow: 0 0 24px var(--sb-glow-accent), inset 0 0 16px rgba(255, 255, 255, 0.08);
+  }
+  50% {
+    transform: scale(0.8);
+    box-shadow: 0 0 36px var(--sb-glow-accent), inset 0 0 24px rgba(255, 255, 255, 0.14);
+  }
+}
+
+.sb-breathe-orb {
+  width: 144px;
+  height: 144px;
+  border-radius: 50%;
+  position: relative;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--sb-accent) 40%, #ffffff 15%), color-mix(in srgb, var(--sb-accent-dim) 55%, transparent 60%));
+  border: 1.5px solid var(--sb-border-glow);
+  box-shadow: 0 0 32px var(--sb-glow-accent), inset 0 0 20px rgba(255, 255, 255, 0.1);
+  transition-property: transform, box-shadow, background, border-color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, box-shadow;
+}
+
+.sb-breathe-orb--idle {
+  animation: sb-orb-idle-breathe 4.5s ease-in-out infinite;
+}
+
+.sb-breathe-guide-ring {
+  position: absolute;
+  width: 168px;
+  height: 168px;
+  border-radius: 50%;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  pointer-events: none;
+}
+
+.sb-schedule-block-dragging {
+  z-index: 10 !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  opacity: 0.92;
+}

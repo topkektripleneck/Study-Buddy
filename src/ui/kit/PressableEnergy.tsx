@@ -27,7 +27,7 @@ export function PressableEnergy({
 
   const variants = {
     primary: {
-      background: "linear-gradient(135deg, var(--sb-accent-dim), #1a3a44)",
+      background: "linear-gradient(135deg, var(--sb-accent-dim), var(--sb-bg-overlay))",
       color: "var(--sb-text-primary)",
       borderColor: "var(--sb-border-glow)",
       boxShadow: "0 0 16px var(--sb-glow-accent)",
@@ -42,7 +42,7 @@ export function PressableEnergy({
   return (
     <button
       type="button"
-      className={["sb-pressable", className].filter(Boolean).join(" ")}
+      className={["sb-pressable", "sb-pressable-hover", className].filter(Boolean).join(" ")}
       style={{ ...base, ...variants[variant] }}
       {...props}
     >

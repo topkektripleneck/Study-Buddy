@@ -14,9 +14,11 @@ import type {
   BlockConflictChoice,
   BlockKind,
   BlockOutcome,
+  BlockRecurrence,
   CalendarTimeBlock,
   EisenhowerQuadrant,
   MainTab,
+  SettingsSection,
   TaskItem,
 } from "@/types";
 
@@ -27,9 +29,12 @@ export interface BlockDraft {
   start: ClockTime;
   end: ClockTime;
   kind: BlockKind;
+  localDate?: Date;
+  recurrence?: BlockRecurrence | null;
 }
 
 const NAVIGATE_EVENT = "sb:navigate";
+const SETTINGS_OPEN_EVENT = "sb:open-settings";
 
 function ipcFailure(error: unknown): ActionResult {
   return {
@@ -69,6 +74,23 @@ export function onNavigate(handler: (tab: MainTab) => void): () => void {
   };
   window.addEventListener(NAVIGATE_EVENT, listener);
   return () => window.removeEventListener(NAVIGATE_EVENT, listener);
+}
+
+export function openSettings(section?: SettingsSection): ActionResult {
+  window.dispatchEvent(
+    new CustomEvent<SettingsSection | undefined>(SETTINGS_OPEN_EVENT, { detail: section }),
+  );
+  return { ok: true, message: "Opened settings" };
+}
+
+export function onOpenSettings(handler: (section?: SettingsSection) => void): () => void {
+  const listener = (event: Event) => {
+    if (event instanceof CustomEvent) {
+      handler(event.detail as SettingsSection | undefined);
+    }
+  };
+  window.addEventListener(SETTINGS_OPEN_EVENT, listener);
+  return () => window.removeEventListener(SETTINGS_OPEN_EVENT, listener);
 }
 
 export async function startFocus(minutes?: number): Promise<ActionResult> {
@@ -113,6 +135,13 @@ export async function resetTimer(): Promise<ActionResult> {
   });
 }
 
+export async function resetData(target: string): Promise<ActionResult> {
+  return ipc(async () => {
+    const message = await api.dataReset(target);
+    return { ok: true, message };
+  });
+}
+
 export async function skipPhase(): Promise<ActionResult> {
   return ipc(async () => {
     await api.timerSkipPhase();
@@ -143,6 +172,73 @@ export async function deleteTask(taskId: string): Promise<ActionResult> {
   return ipc(async () => {
     await api.taskDelete(taskId);
     return { ok: true, message: "Task deleted" };
+  });
+}
+
+export async function updateTask(task: TaskItem): Promise<ActionResult> {
+  return ipc(async () => {
+    await api.taskUpdate(task);
+    return { ok: true, message: `Updated "${task.title}"` };
+  });
+}
+
+export async function reorderTasks(orderedIds: string[]): Promise<ActionResult> {
+  return ipc(async () => {
+    await api.taskReorder(orderedIds);
+    return { ok: true, message: "Tasks reordered" };
+  });
+}
+
+export async function confirmTimerRestore(): Promise<ActionResult> {
+  return ipc(async () => {
+    await api.timerConfirmRestore();
+    return { ok: true, message: "Session restored" };
+  });
+}
+
+export async function discardTimerRestore(): Promise<ActionResult> {
+  return ipc(async () => {
+    await api.timerDiscardRestore();
+    return { ok: true, message: "Session discarded" };
+  });
+}
+
+export async function ackTimerSuspend(): Promise<ActionResult> {
+  return ipc(async () => {
+    await api.timerAckSuspend();
+    return { ok: true, message: "Timer resumed" };
+  });
+}
+
+export async function exportBackup(destPath: string): Promise<ActionResult> {
+  return ipc(async () => {
+    await api.storageExportZip(destPath);
+    return { ok: true, message: "Backup exported" };
+  });
+}
+
+export async function importBackup(srcPath: string): Promise<ActionResult> {
+  return ipc(async () => {
+    const message = await api.storageImportZip(srcPath);
+    return { ok: true, message };
+  });
+}
+
+export async function importCalendarIcs(srcPath: string): Promise<ActionResult> {
+  return ipc(async () => {
+    const result = await api.calendarImportIcs(srcPath);
+    return { ok: true, message: result.message };
+  });
+}
+
+export async function setDailyTarget(minutes: number): Promise<ActionResult> {
+  const clamped = Math.min(480, Math.max(15, Math.round(minutes)));
+  if (!Number.isFinite(clamped)) {
+    return { ok: false, message: "Target must be a number of minutes" };
+  }
+  return ipc(async () => {
+    await api.metricsSetTarget(clamped);
+    return { ok: true, message: `Daily target set to ${clamped}m` };
   });
 }
 
@@ -179,6 +275,8 @@ export async function addBlock(draft: BlockDraft): Promise<BlockOutcome> {
     minute: draft.start.minute,
     durationMinutes,
     kind: draft.kind,
+    localDate: draft.localDate,
+    recurrence: draft.recurrence,
   });
 
   return ipcBlock(async () => {
@@ -282,19 +380,40 @@ export async function removeBlockAt(time: ClockTime): Promise<ActionResult> {
 }
 
 export async function linkBlockToTask(block: CalendarTimeBlock): Promise<ActionResult> {
-  return ipc(async () => {
+  try {
     const task = await api.taskCreate(block.title);
+    return await linkTaskToBlock(block, task.id, task);
+  } catch (error) {
+    return ipcFailure(error);
+  }
+}
+
+export async function linkTaskToBlock(
+  block: CalendarTimeBlock,
+  taskId: string,
+  existingTask?: TaskItem,
+): Promise<ActionResult> {
+  return ipc(async () => {
+    const task =
+      existingTask ?? (await api.tasksList()).find((t) => t.id === taskId) ?? null;
+    if (!task) return { ok: false, message: "Task not found" };
+
+    const linkedBlockIds = task.linkedBlockIds.includes(block.id)
+      ? task.linkedBlockIds
+      : [...task.linkedBlockIds, block.id];
     const linkedTask: TaskItem = {
       ...task,
-      linkedBlockIds: [...task.linkedBlockIds, block.id],
-      estimateMinutes: Math.round(
-        (new Date(block.endAt).getTime() - new Date(block.startAt).getTime()) / 60_000,
-      ),
+      linkedBlockIds,
+      estimateMinutes:
+        task.estimateMinutes ??
+        Math.round(
+          (new Date(block.endAt).getTime() - new Date(block.startAt).getTime()) / 60_000,
+        ),
     };
     await api.taskUpdate(linkedTask);
     await api.calendarSaveBlock({
       ...block,
-      taskId: task.id,
+      taskId: block.taskId ?? task.id,
       updatedAt: new Date().toISOString(),
     });
     return { ok: true, message: `Linked task "${task.title}"` };

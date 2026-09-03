@@ -13,26 +13,34 @@ export function CommandBar() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setOpen((prev) => !prev);
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "k") return;
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
       }
+      event.preventDefault();
+      setOpen(true);
+      inputRef.current?.focus();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
-
   const suggestions = useMemo(() => suggestCommands(value).slice(0, 5), [value]);
   const hint = useMemo(() => resolveCommand(value)?.spec.summary ?? null, [value]);
+  const showExtras = open && (pending || suggestions.length > 0 || feedback || hint);
 
   function collapse() {
     setOpen(false);
     setPending(null);
     setValue("");
+    setFeedback(null);
+    inputRef.current?.blur();
   }
 
   async function submit() {
@@ -103,107 +111,91 @@ export function CommandBar() {
   }
 
   return (
-    <div style={dock}>
-      {open && (
-        <div className="sb-glass sb-command-panel" style={panel}>
+    <div className="sb-command-dock">
+      {showExtras && (
+        <div className="sb-glass sb-command-panel" style={extras}>
           {pending ? (
-            <p style={conflictLine}>
+            <p className="sb-warn-banner">
               Conflicts with {pending.conflicts.map((c) => c.title).join(", ")} —{" "}
               <kbd>R</kbd> replace · <kbd>M</kbd> move · <kbd>C</kbd> cancel
             </p>
           ) : (
-            suggestions.length > 0 && (
-              <div style={suggestionRow}>
-                {suggestions.map((command) => (
-                  <button
-                    key={command.id}
-                    type="button"
-                    className="sb-pressable"
-                    style={suggestionChip}
-                    onClick={() => {
-                      setValue(`${command.names[0]} `);
-                      inputRef.current?.focus();
-                    }}
-                  >
-                    {command.usage}
-                  </button>
-                ))}
-              </div>
-            )
-          )}
-
-          <div style={inputRow}>
-            <span style={prompt}>:</span>
-            <input
-              ref={inputRef}
-              style={input}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={onKeyDown}
-              placeholder="timer 30 · block 1:30-2:30 focus Essay · go schedule"
-              spellCheck={false}
-              aria-label="Command input"
-            />
-            <button
-              type="button"
-              className="sb-pressable"
-              style={closeBtn}
-              onClick={collapse}
-              title="Close (Esc)"
-            >
-              ×
-            </button>
-          </div>
-
-          {(feedback || hint) && !pending && (
-            <p
-              style={{
-                ...hintStyle,
-                color: feedback
-                  ? feedback.ok
-                    ? "var(--sb-accent)"
-                    : "#ffaaaa"
-                  : "var(--sb-text-muted)",
-              }}
-            >
-              {feedback?.text ?? hint}
-            </p>
+            <>
+              {suggestions.length > 0 && (
+                <div style={suggestionRow}>
+                  {suggestions.map((command) => (
+                    <button
+                      key={command.id}
+                      type="button"
+                      className="sb-pressable sb-pressable-hover"
+                      style={suggestionChip}
+                      onClick={() => {
+                        setValue(`${command.names[0]} `);
+                        inputRef.current?.focus();
+                      }}
+                    >
+                      {command.usage}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {(feedback || hint) && (
+                <p
+                  style={{
+                    ...hintStyle,
+                    color: feedback
+                      ? feedback.ok
+                        ? "var(--sb-accent)"
+                        : "var(--sb-error)"
+                      : "var(--sb-text-muted)",
+                  }}
+                >
+                  {feedback?.text ?? hint}
+                </p>
+              )}
+            </>
           )}
         </div>
       )}
 
-      {!open && (
-        <button
-          type="button"
-          className="sb-glass sb-pressable"
-          style={launcher}
-          onClick={() => setOpen(true)}
-          title="Command bar (Ctrl+K)"
-        >
-          ›_
-        </button>
-      )}
+      <div className={`sb-glass sb-command-bar${open ? " sb-command-bar-active" : ""}`} style={bar}>
+        <div style={inputRow}>
+          <span style={prompt}>:</span>
+          <input
+            ref={inputRef}
+            style={input}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onFocus={() => setOpen(true)}
+            onKeyDown={onKeyDown}
+            placeholder="Ctrl+K · timer 30 · block 1:30-2:30 focus · go schedule"
+            spellCheck={false}
+            aria-label="Command input"
+          />
+          <span style={shortcut}>Ctrl+K</span>
+        </div>
+      </div>
     </div>
   );
 }
 
-const dock = {
-  position: "fixed" as const,
-  left: 0,
-  right: 0,
-  bottom: "var(--sb-space-md)",
+const extras = {
+  padding: "10px var(--sb-space-lg)",
+  borderBottom: "1px solid var(--sb-border-subtle)",
+};
+
+const bar = {
+  padding: "12px var(--sb-space-lg)",
+};
+
+const inputRow = {
   display: "flex",
-  flexDirection: "column" as const,
   alignItems: "center",
-  zIndex: 90,
+  gap: "10px",
+  maxWidth: "1200px",
+  margin: "0 auto",
 };
-const panel = {
-  width: "min(720px, 92vw)",
-  padding: "10px 12px",
-  marginBottom: "8px",
-  borderRadius: "var(--sb-radius-md)",
-};
-const inputRow = { display: "flex", alignItems: "center", gap: "8px" };
+
 const prompt = { fontFamily: "var(--sb-font-mono)", fontSize: "16px", color: "var(--sb-accent)" };
 const input = {
   flex: 1,
@@ -213,8 +205,15 @@ const input = {
   color: "var(--sb-text-primary)",
   fontFamily: "var(--sb-font-mono)",
   fontSize: "14px",
+  minWidth: 0,
 };
-const closeBtn = { border: "none", background: "transparent", color: "var(--sb-text-muted)", cursor: "pointer", fontSize: "18px" };
+const shortcut = {
+  fontSize: "11px",
+  color: "var(--sb-text-muted)",
+  fontFamily: "var(--sb-font-mono)",
+  letterSpacing: "0.04em",
+  flexShrink: 0,
+};
 const suggestionRow = { display: "flex", gap: "6px", flexWrap: "wrap" as const, marginBottom: "8px" };
 const suggestionChip = {
   padding: "3px 8px",
@@ -227,15 +226,4 @@ const suggestionChip = {
   fontSize: "11px",
   fontFamily: "var(--sb-font-mono)",
 };
-const conflictLine = { margin: "0 0 8px", fontSize: "12px", color: "#ffcc88" };
-const hintStyle = { margin: "6px 0 0", fontSize: "12px", fontFamily: "var(--sb-font-mono)" };
-const launcher = {
-  alignSelf: "flex-end" as const,
-  marginRight: "var(--sb-space-lg)",
-  width: "44px",
-  height: "44px",
-  borderRadius: "50%",
-  color: "var(--sb-accent)",
-  fontFamily: "var(--sb-font-mono)",
-  fontWeight: 700,
-};
+const hintStyle = { margin: 0, fontSize: "12px", fontFamily: "var(--sb-font-mono)" };

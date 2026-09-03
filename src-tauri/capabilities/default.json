@@ -2,10 +2,11 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capability for Study Buddy webviews",
-  "windows": ["main", "calendar", "hud"],
+  "windows": ["main", "calendar", "hud", "toast"],
   "permissions": [
     "core:default",
     "opener:default",
-    "dialog:default"
+    "dialog:default",
+    "notification:default"
   ]
 }

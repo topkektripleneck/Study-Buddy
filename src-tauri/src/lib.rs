@@ -1,7 +1,10 @@
+mod calendar;
 mod commands;
 mod error;
+mod ics;
 mod metrics;
 mod models;
+mod notify;
 mod state;
 mod storage;
 mod timer;
@@ -20,11 +23,16 @@ use timer::TimerActor;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--autostart"]),
+        ))
         .plugin(
             tauri_plugin_window_state::Builder::default()
-                .with_denylist(&["hud"])
+                .with_denylist(&["hud", "toast"])
                 .build(),
         )
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -49,7 +57,12 @@ pub fn run() {
             // if the app was left running across midnight.
             let _ = metrics::recalculate(&storage);
 
-            let timer = TimerActor::new(storage.clone(), app.handle().clone(), config);
+            let timer = TimerActor::new(storage.clone(), app.handle().clone(), config.clone());
+
+            if config.autostart {
+                use tauri_plugin_autostart::ManagerExt;
+                let _ = app.autolaunch().enable();
+            }
 
             app.manage(AppState {
                 storage,
@@ -77,12 +90,21 @@ pub fn run() {
                         let _ = windows::WindowManager::focus(app, "main");
                     }
                     "toggle_hud" => {
-                        let _ = commands::toggle_window_from_tray(app, "hud");
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = commands::toggle_window_from_tray(&app, "hud");
+                        });
                     }
                     "toggle_calendar" => {
-                        let _ = commands::toggle_window_from_tray(app, "calendar");
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = commands::toggle_window_from_tray(&app, "calendar");
+                        });
                     }
                     "quit" => {
+                        if let Some(state) = app.try_state::<AppState>() {
+                            state.timer.flush();
+                        }
                         app.exit(0);
                     }
                     _ => {}
@@ -100,7 +122,11 @@ pub fn run() {
             commands::window_close,
             commands::window_is_open,
             commands::window_toggle,
+            commands::notify_take_pending,
+            commands::notify_test,
             commands::storage_open_data_dir,
+            commands::storage_export_zip,
+            commands::storage_import_zip,
             commands::tasks_list,
             commands::task_create,
             commands::task_update,
@@ -108,20 +134,26 @@ pub fn run() {
             commands::task_delete,
             commands::matrix_get,
             commands::matrix_set_quadrant,
+            commands::matrix_move_item,
+            commands::matrix_stage_for_calendar,
             commands::matrix_remove_item,
+            commands::matrix_update_item,
             commands::calendar_list,
             commands::calendar_save_block,
+            commands::calendar_import_ics,
             commands::calendar_delete_block,
             commands::metrics_get,
+            commands::metrics_set_target,
             commands::activity_daily_totals,
             commands::config_get,
             commands::config_save,
             commands::layout_get,
             commands::layout_save,
+            commands::data_reset,
             commands::energy_recent,
             commands::energy_log,
             commands::journal_list,
-            commands::journal_add,
+            commands::journal_save,
             commands::journal_delete,
             commands::chime_import,
             commands::timer_subscribe,
@@ -131,7 +163,24 @@ pub fn run() {
             commands::timer_resume,
             commands::timer_reset,
             commands::timer_skip_phase,
+            commands::timer_get_pending_restore,
+            commands::timer_confirm_restore,
+            commands::timer_discard_restore,
+            commands::timer_ack_suspend,
+            commands::task_reorder,
+            commands::autostart_enable,
+            commands::autostart_disable,
+            commands::autostart_is_enabled,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(on_run_event);
+}
+
+fn on_run_event(app: &tauri::AppHandle, event: tauri::RunEvent) {
+    if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
+        if let Some(state) = app.try_state::<AppState>() {
+            state.timer.flush();
+        }
+    }
 }

@@ -1,6 +1,6 @@
 # Study Buddy
 
-Local-first desktop productivity app (Tauri 2 + React + TypeScript).
+Local-first desktop productivity app (Tauri 2 + React 19 + TypeScript).
 
 ## Setup
 
@@ -9,40 +9,49 @@ npm install
 npm run tauri dev
 ```
 
-## Implemented
+## Features
 
-### Phase 1
-- React + Vite + HashRouter (`/`, `/calendar`, `/hud`)
-- Originkit UI kit in `src/ui/kit/`
-- Tri-window shell
+### Core
+- Hash router: `/`, `/calendar`, `/hud`, `/toast`
+- Tri-window shell (main, calendar, HUD) + toast popup
+- Rust `StorageEngine` with atomic JSON writes, backup restore on parse failure, and schema migration hook
+- Command bar (`Ctrl+K`) for timer, navigation, blocks, settings, export/import backup, and data reset
 
-### Phase 2
-- Rust `AppState` + file-based `StorageEngine` (atomic JSON writes)
-- Typed commands for tasks, matrix, calendar, config, layout, metrics
-- Data stored in `%APPDATA%/study-buddy/` (Windows)
+### Timer & focus
+- Rust timer actor (200 ms ticks, anchor-based elapsed time)
+- Suspend/sleep gaps excluded; auto-pause after wake with resume prompt
+- **Session restore** on launch when `session.json` has an interrupted session
+- HUD readout; `session.json` checkpoint on quit
 
-### Phase 3
-- `window-state` persistence, single-instance focus, system tray menu
-- Monitor position validation on startup
-- Lazy calendar + HUD window spawning
+### Widgets
+- Focus, tasks (priority, due date, drag reorder, inline rename), Eisenhower matrix, breathing (box / 4-7-8 / energy), energy, journal, vent
+- Widget drag-and-drop reorder; consistency bar + daily target ring
 
-### Phase 4
-- Rust timer actor (200ms ticks, anchor-based elapsed time)
-- `timer_subscribe` Channel IPC + `timer:*` events
-- Session checkpoint to `session.json`
-- Live HUD readout (timer, streak, today %)
+### Eisenhower matrix
+- Drag between quadrants; **5s undo** before archiving dropped-on-eliminate tasks
+- Schedule quadrant: due date + calendar staging
+- Delegate / eliminate: inline notes on cards
 
-### UI (from wireframes)
-- Top nav: **Widgets | Schedule / Calendar | Eisenhower Matrix**
-- Widget library with `+` add flow
-- Schedule view: tasks sidebar + timeline with current-time arrow
-- Eisenhower 2×2 quadrant grid
+### Calendar
+- Day / week views; click-to-add and click-to-edit blocks
+- Drag to move, drag bottom edge to resize, side-by-side overlap columns
+- Matrix → calendar staging rail
+
+### Themes & settings
+- Galaxy, 8-bit palettes, and astrology with per-sign zodiac backdrop
+- Sidebar settings: themes, zodiac, quiet hours, notifications, pomodoro, **export / restore backup zip**
+
+### Notifications
+- Timer phase and schedule block alerts
+- **Streak at risk** (after 6 pm) and **daily target reached** nudges
+- In-app toasts + OS notifications; respects quiet hours
 
 ## Scripts
 
 - `npm run dev` — Vite frontend only
 - `npm run tauri dev` — full desktop app
 - `npm run tauri build` — production build
+- `npm test` — Vitest unit tests
 - `cargo test --manifest-path src-tauri/Cargo.toml` — Rust tests
 
 Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)

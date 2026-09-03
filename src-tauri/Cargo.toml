@@ -24,6 +24,9 @@ thiserror = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 tauri-plugin-dialog = "2.7.2"
+tauri-plugin-notification = "2.4.0"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+tauri-plugin-autostart = "2"
 
 [dev-dependencies]
 tempfile = "3"

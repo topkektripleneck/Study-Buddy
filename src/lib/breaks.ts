@@ -18,6 +18,7 @@ const TIERS: BreakTier[] = [
       { label: "20-20-20 rule", detail: "Look 20 ft away for 20 seconds to rest your eyes" },
       { label: "Refill water", detail: "Stand up, hydrate, sit back down" },
       { label: "Box breathing", detail: "4 in, 4 hold, 4 out, 4 hold — twice through" },
+      { label: "Energy breath", detail: "Quick 2-2 inhale/exhale in the Breathe widget" },
     ],
   },
   {
