@@ -32,11 +32,12 @@ Every state transition and timer tick is authoritative in Rust, and all persiste
 - **Transparent disk storage**: All tasks, schedule blocks, journal entries, and streak metrics live in readable JSON files under your local app data folder.
 - **One-click backup & restore**: Export complete zip snapshots anytime and restore with automatic pre-flight safety backups.
 
+
 ### 🌌 Cosmic Astrology & Illuminated Artwork
 - **12 Dynamic Zodiac Themes**: Tailored color palettes, generative starfields, and multi-layered CSS nebulas for each astrological sign.
 - **Illuminated Medieval Artwork**: Floating manuscript illustrations integrated into the widget environment that harmonize with your active sign.
 - **Alternative Themes**: Enjoy sleek Cosmic **Galaxy** or retro CRT-inspired **8-Bit** terminal aesthetics with custom colorways.
-
+<img width="1275" height="885" alt="image" src="https://github.com/user-attachments/assets/51d112e5-02a9-4353-ab5e-240dea17124c" />
 ### ⏱️ Rock-Solid Rust Timer Actor & HUD
 - **Authoritative Rust Engine**: 200ms precision ticks driven by an isolated background thread immune to JavaScript UI throttling.
 - **Sleep & Suspend Recovery**: Automatically detects system sleep or hibernation, excludes suspend gaps from elapsed focus time, and prompts to resume.
@@ -47,6 +48,8 @@ Every state transition and timer tick is authoritative in Rust, and all persiste
 - **Interactive Timeline**: Day and week views with drag-and-drop block placement, bottom-edge resizing, and automatic collision columns.
 - **Google Calendar Import**: Seamlessly import `.ics` calendar files.
 - **Minimized Start/End Banners**: Smart notifications (Windows Action Center + floating in-app toast card) fire reliably even when Study Buddy is minimized.
+<img width="1279" height="893" alt="image" src="https://github.com/user-attachments/assets/50bf5c28-329e-4316-a1ba-1822cb02767f" />
+<img width="1273" height="888" alt="image" src="https://github.com/user-attachments/assets/b470e77a-dfd7-43f3-a18c-f1502c4078f5" />
 
 ### 🧩 Modular Drag-and-Drop Widget Suite
 - **Focus Widget**: Quick-start protocols (Pomodoro, 50/10, Deep Work, Custom Stopwatch).
