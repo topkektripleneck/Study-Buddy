@@ -4,12 +4,14 @@ import { LinkBlockTaskModal } from "@/components/LinkBlockTaskModal";
 import { TaskPromptModal } from "@/components/TaskPromptModal";
 import { useListen } from "@/hooks/useListen";
 import { useNow } from "@/hooks/useNow";
+import { useWheelPeriodNav } from "@/hooks/useWheelPeriodNav";
 import { addBlock, deleteBlock, linkBlockToTask, linkTaskToBlock, resolveBlockConflict } from "@/lib/actions";
 import { api } from "@/lib/api";
 import { safeListen } from "@/lib/safeListen";
 import {
   HOUR_ROW_HEIGHT,
   SCHEDULE_HOURS,
+  addCalendarDays,
   endTimeFrom,
   formatClockLabel,
   formatHourLabel,
@@ -27,6 +29,7 @@ import {
 import { PressableEnergy, Surface } from "@/ui/kit";
 import type { AppConfig, CalendarTimeBlock, PendingConflict, TaskItem, TimeBlockDraft } from "@/types";
 
+import { MonthCalendarView } from "@/components/MonthCalendarView";
 import { resolveBlockColor } from "@/lib/constellations";
 
 interface SlotTarget {
@@ -34,18 +37,23 @@ interface SlotTarget {
   minute: number;
 }
 
-type CalendarViewMode = "day" | "week";
+export type CalendarViewMode = "month" | "year" | "day" | "week";
 
 interface StagedItem {
   taskId: string;
   title: string;
 }
 
-export function ScheduleView() {
+export interface ScheduleViewProps {
+  initialViewMode?: CalendarViewMode;
+}
+
+export function ScheduleView({ initialViewMode = "month" }: ScheduleViewProps = {}) {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [blocks, setBlocks] = useState<CalendarTimeBlock[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [viewMode, setViewMode] = useState<CalendarViewMode>("day");
+  const [viewMode, setViewMode] = useState<CalendarViewMode>(initialViewMode);
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [selectedWeekDay, setSelectedWeekDay] = useState(() => new Date());
   const [staged, setStaged] = useState<StagedItem[]>([]);
   const [slot, setSlot] = useState<SlotTarget | null>(null);
@@ -85,6 +93,7 @@ export function ScheduleView() {
 
   useEffect(() => {
     refresh();
+    void api.calendarSyncGcal(false).catch(() => {});
   }, [refresh]);
 
   useListen(refresh, "calendar:changed", "tasks:changed", "config:changed");
@@ -98,9 +107,57 @@ export function ScheduleView() {
     });
   }, []);
 
-  const weekDays = useMemo(() => localWeekDates(now), [now]);
+  const weekDays = useMemo(() => localWeekDates(selectedWeekDay), [selectedWeekDay]);
 
-  const timelineDay = viewMode === "day" ? now : selectedWeekDay;
+  const timelineDay = viewMode === "day" ? selectedDate : selectedWeekDay;
+
+  const periodLabel = useMemo(() => {
+    if (viewMode === "day") {
+      return timelineDay.toLocaleDateString(undefined, {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
+    }
+    if (viewMode === "week" && weekDays.length === 7) {
+      const start = weekDays[0].toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      const end = weekDays[6].toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+      return `${start} – ${end}`;
+    }
+    return "";
+  }, [viewMode, timelineDay, weekDays]);
+
+  const periodNavRef = useRef<HTMLDivElement>(null);
+
+  const shiftTimelinePeriod = useCallback(
+    (step: -1 | 1) => {
+      if (viewMode === "day") {
+        const next = addCalendarDays(selectedDate, step);
+        setSelectedDate(next);
+        setSelectedWeekDay(next);
+        return;
+      }
+      if (viewMode === "week") {
+        const next = addCalendarDays(selectedWeekDay, step * 7);
+        setSelectedWeekDay(next);
+        setSelectedDate(next);
+      }
+    },
+    [viewMode, selectedDate, selectedWeekDay],
+  );
+
+  useWheelPeriodNav(periodNavRef, shiftTimelinePeriod, viewMode === "day" || viewMode === "week");
+
+  function goTimelineToday() {
+    const today = new Date();
+    setSelectedDate(today);
+    setSelectedWeekDay(today);
+  }
 
   const timelineBlocks = useMemo(
     () =>
@@ -310,15 +367,45 @@ export function ScheduleView() {
   }
 
   return (
-    <div>
+    <div className="sb-schedule-view">
       {error && (
         <p className="sb-error-banner" role="alert">
           {error}
         </p>
       )}
 
-      <div style={layout}>
-        <aside style={sidebar}>
+      {viewMode === "month" || viewMode === "year" ? (
+        <MonthCalendarView
+          blocks={blocks}
+          tasks={tasks}
+          selectedDate={selectedDate}
+          onSelectDate={(d) => {
+            setSelectedDate(d);
+            setSelectedWeekDay(d);
+          }}
+          onAddBlockAtDate={(d) => {
+            setSelectedDate(d);
+            setSlot({
+              hour: now.getHours(),
+              minute: Math.floor(now.getMinutes() / 15) * 15,
+            });
+          }}
+          onEditBlock={(b) => setEditBlock(b)}
+          onSwitchToDayView={(d) => {
+            setSelectedDate(d);
+            setSelectedWeekDay(d);
+            setViewMode("day");
+          }}
+          onSwitchToWeekView={() => {
+            setSelectedWeekDay(new Date(selectedDate));
+            setViewMode("week");
+          }}
+          mode={viewMode}
+          onModeChange={(m) => setViewMode(m)}
+        />
+      ) : (
+        <div style={layout} className="sb-schedule-view">
+        <aside style={sidebar} className="sb-schedule-scroll sb-schedule-scroll--sidebar">
           {staged.length > 0 && (
             <div style={stagingRail}>
               <strong style={stagingTitle}>Staging</strong>
@@ -362,48 +449,85 @@ export function ScheduleView() {
           </ul>
         </aside>
 
-        <Surface padding="md" variant="overlay" style={timelineWrap}>
-          <div style={timelineHeader}>
-            <h3 style={heading}>Scheduler</h3>
-            <div style={headerActions}>
-              <div style={viewToggle}>
+        <Surface padding="md" variant="overlay" style={timelineWrap} className="sb-schedule-view">
+          <div style={calendarToolbar}>
+            <div style={navGroup}>
+              <div style={segmentViewToggle}>
                 <button
                   type="button"
-                  className="sb-pressable"
-                  style={viewMode === "day" ? viewActive : viewBtn}
-                  onClick={() => setViewMode("day")}
+                  className="sb-pressable sb-pressable-hover"
+                  style={segmentBtn}
+                  onClick={() => setViewMode("month")}
                 >
-                  Day
+                  Month
                 </button>
                 <button
                   type="button"
-                  className="sb-pressable"
-                  style={viewMode === "week" ? viewActive : viewBtn}
-                  onClick={() => {
-                    setViewMode("week");
-                    setSelectedWeekDay(new Date(now));
-                  }}
+                  className="sb-pressable sb-pressable-hover"
+                  style={segmentBtn}
+                  onClick={() => setViewMode("year")}
                 >
-                  Week
+                  Year
                 </button>
               </div>
-              {viewMode === "week" && (
-                <div style={weekDaysRow}>
-                  {weekDays.map((d) => (
-                    <button
-                      key={d.toDateString()}
-                      type="button"
-                      className="sb-pressable"
-                      style={
-                        d.toDateString() === timelineDay.toDateString() ? viewActive : viewBtn
-                      }
-                      onClick={() => setSelectedWeekDay(d)}
-                    >
-                      {d.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}
-                    </button>
-                  ))}
-                </div>
-              )}
+
+              <div
+                ref={periodNavRef}
+                style={periodNav}
+                title={viewMode === "week" ? "Scroll to change week" : "Scroll to change day"}
+              >
+                <button
+                  type="button"
+                  className="sb-pressable sb-pressable-hover"
+                  style={iconBtn}
+                  onClick={() => shiftTimelinePeriod(-1)}
+                  aria-label="Previous"
+                >
+                  ◀
+                </button>
+                <h2 style={periodTitle}>{periodLabel}</h2>
+                <button
+                  type="button"
+                  className="sb-pressable sb-pressable-hover"
+                  style={iconBtn}
+                  onClick={() => shiftTimelinePeriod(1)}
+                  aria-label="Next"
+                >
+                  ▶
+                </button>
+                <button
+                  type="button"
+                  className="sb-pressable sb-pressable-hover"
+                  style={todayBtn}
+                  onClick={goTimelineToday}
+                >
+                  Today
+                </button>
+              </div>
+            </div>
+
+            <div style={actionsGroup}>
+              <button
+                type="button"
+                className="sb-pressable sb-pressable-hover"
+                style={viewMode === "day" ? scheduleBtnActive : scheduleBtn}
+                onClick={() => setViewMode("day")}
+                title="Open hourly timeline schedule for selected date"
+              >
+                Day Schedule ⏱
+              </button>
+              <button
+                type="button"
+                className="sb-pressable sb-pressable-hover"
+                style={viewMode === "week" ? scheduleBtnActive : scheduleBtn}
+                onClick={() => {
+                  setViewMode("week");
+                  setSelectedWeekDay(new Date(selectedDate));
+                }}
+                title="Open 7-day timeline schedule"
+              >
+                Week Schedule ◷
+              </button>
               <PressableEnergy
                 onClick={() =>
                   setSlot({
@@ -428,7 +552,26 @@ export function ScheduleView() {
               </label>
             </div>
           </div>
+          {viewMode === "week" && (
+            <div style={weekDaysRow}>
+              {weekDays.map((d) => {
+                const active = d.toDateString() === timelineDay.toDateString();
+                return (
+                  <button
+                    key={d.toDateString()}
+                    type="button"
+                    className="sb-pressable sb-pressable-hover"
+                    style={{ ...weekDayChip, ...(active ? weekDayChipActive : {}) }}
+                    onClick={() => setSelectedWeekDay(d)}
+                  >
+                    {d.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
+          <div className="sb-schedule-scroll">
           <div style={{ ...timeline, height: `${timelineHeight}px` }}>
             {SCHEDULE_HOURS.map((h) => (
               <button
@@ -539,8 +682,10 @@ export function ScheduleView() {
               );
             })}
           </div>
+          </div>
         </Surface>
       </div>
+      )}
 
       {conflict && (
         <p className="sb-warn-banner" style={conflictBanner}>
@@ -605,23 +750,126 @@ const stagingRail = {
   border: "1px dashed var(--sb-border-glow)",
 };
 const stagingTitle = { fontSize: "11px", textTransform: "uppercase" as const, letterSpacing: "0.08em" };
-const viewToggle = { display: "flex", gap: "4px" };
-const weekDaysRow = { display: "flex", flexWrap: "wrap" as const, gap: "4px" };
-const viewBtn = {
-  fontSize: "12px",
-  padding: "4px 10px",
-  border: "1px solid var(--sb-border-subtle)",
+const calendarToolbar = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  flexWrap: "wrap" as const,
+  gap: "var(--sb-space-md)",
+  marginBottom: "12px",
+};
+const navGroup = {
+  display: "flex",
+  alignItems: "center",
+  gap: "var(--sb-space-md)",
+  flexWrap: "wrap" as const,
+};
+const segmentViewToggle = {
+  display: "flex",
+  background: "var(--sb-bg-base)",
   borderRadius: "var(--sb-radius-sm)",
+  padding: "2px",
+  border: "1px solid var(--sb-border-subtle)",
+};
+const segmentBtn = {
+  padding: "6px 14px",
+  border: "none",
   background: "transparent",
+  color: "var(--sb-text-secondary)",
+  borderRadius: "var(--sb-radius-sm)",
+  font: "inherit",
+  fontSize: "13px",
+  fontWeight: 500,
   cursor: "pointer",
 };
-const viewActive = { ...viewBtn, background: "var(--sb-bg-overlay)", color: "var(--sb-accent)" };
+const periodNav = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+};
+const iconBtn = {
+  padding: "6px 10px",
+  border: "1px solid var(--sb-border-subtle)",
+  background: "var(--sb-bg-base)",
+  color: "var(--sb-text-primary)",
+  borderRadius: "var(--sb-radius-sm)",
+  cursor: "pointer",
+  font: "inherit",
+  fontSize: "12px",
+};
+const todayBtn = {
+  padding: "6px 12px",
+  border: "1px solid var(--sb-border-subtle)",
+  background: "var(--sb-bg-base)",
+  color: "var(--sb-text-secondary)",
+  borderRadius: "var(--sb-radius-sm)",
+  cursor: "pointer",
+  font: "inherit",
+  fontSize: "12px",
+};
+const periodTitle = {
+  margin: 0,
+  fontSize: "16px",
+  fontWeight: 600,
+  minWidth: "140px",
+  maxWidth: "280px",
+  textAlign: "center" as const,
+  color: "var(--sb-text-primary)",
+};
+const actionsGroup = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  flexWrap: "wrap" as const,
+};
+const weekDaysRow = {
+  display: "flex",
+  flexWrap: "wrap" as const,
+  gap: "4px",
+  marginBottom: "12px",
+};
+const weekDayChip = {
+  padding: "6px 12px",
+  border: "none",
+  background: "transparent",
+  color: "var(--sb-text-secondary)",
+  borderRadius: "var(--sb-radius-sm)",
+  cursor: "pointer",
+  font: "inherit",
+  fontSize: "13px",
+  fontWeight: 500,
+};
+const weekDayChipActive = {
+  background: "var(--sb-bg-overlay)",
+  color: "var(--sb-accent)",
+  boxShadow: "0 0 8px var(--sb-glow-accent)",
+};
+const scheduleBtn = {
+  padding: "8px 14px",
+  border: "1px solid var(--sb-border-subtle)",
+  background: "var(--sb-bg-base)",
+  color: "var(--sb-text-primary)",
+  borderRadius: "var(--sb-radius-sm)",
+  cursor: "pointer",
+  font: "inherit",
+  fontSize: "13px",
+  fontWeight: 500,
+};
+const scheduleBtnActive = {
+  ...scheduleBtn,
+  background: "var(--sb-bg-overlay)",
+  color: "var(--sb-accent)",
+  borderColor: "var(--sb-border-glow)",
+  boxShadow: "0 0 8px var(--sb-glow-accent)",
+};
 
 const layout = {
   display: "grid",
   gridTemplateColumns: "240px 1fr",
   gap: "var(--sb-space-md)",
-  minHeight: "520px",
+  flex: 1,
+  minHeight: 0,
+  alignItems: "stretch" as const,
 };
 
 const sidebar = {
@@ -629,7 +877,7 @@ const sidebar = {
   background: "var(--sb-bg-raised)",
   borderRadius: "var(--sb-radius-md)",
   border: "1px solid var(--sb-border-subtle)",
-  alignSelf: "start" as const,
+  minHeight: 0,
 };
 
 const sidebarHeader = {
@@ -657,20 +905,12 @@ const emptyItem = {
 const linkedTag = { color: "var(--sb-accent)", fontSize: "12px" };
 const repeatTag = { color: "var(--sb-text-muted)", fontSize: "11px" };
 
-const timelineWrap = { position: "relative" as const };
-const timelineHeader = {
+const timelineWrap = {
+  position: "relative" as const,
   display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  marginBottom: "12px",
-  flexWrap: "wrap" as const,
-  gap: "8px",
-};
-const headerActions = {
-  display: "flex",
-  alignItems: "center",
-  gap: "12px",
-  flexWrap: "wrap" as const,
+  flexDirection: "column" as const,
+  minHeight: 0,
+  overflow: "hidden",
 };
 const toggle = {
   fontSize: "12px",

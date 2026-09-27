@@ -8,10 +8,21 @@ export function safeListen<T>(
   let disposed = false;
   let unlisten: UnlistenFn | null = null;
 
-  listen(event, handler).then((u) => {
-    if (disposed) u();
-    else unlisten = u;
-  });
+  try {
+    if (
+      typeof window !== "undefined" &&
+      (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+    ) {
+      listen(event, handler)
+        .then((u) => {
+          if (disposed) u();
+          else unlisten = u;
+        })
+        .catch(() => {});
+    }
+  } catch {
+    // Gracefully ignore in non-Tauri preview environments
+  }
 
   return () => {
     disposed = true;

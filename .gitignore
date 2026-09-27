@@ -9,6 +9,7 @@ src-tauri/gen/schemas
 node_modules/
 dist/
 dist-ssr/
+executable/
 *.local
 
 # Logs

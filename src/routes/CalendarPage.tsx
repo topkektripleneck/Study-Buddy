@@ -5,28 +5,28 @@ import { openWindow } from "@/lib/windows";
 
 export function CalendarPage() {
   return (
-    <div style={page} className="sb-themed-page">
+    <div style={page} className="sb-themed-page sb-themed-page--scroll">
       <ZodiacBackdrop />
       <div className="sb-themed-page__content">
         <header style={header}>
           <div>
             <p style={eyebrow}>Secondary Window</p>
-            <h1 style={title}>Calendar</h1>
+            <h1 style={title}>Month & Year Calendar</h1>
           </div>
           <PressableEnergy variant="ghost" onClick={() => openWindow("main")}>
             Focus Workspace
           </PressableEnergy>
         </header>
-        <ScheduleView />
+        <div className="sb-tab-panel--fill">
+          <ScheduleView initialViewMode="month" />
+        </div>
       </div>
     </div>
   );
 }
 
 const page = {
-  minHeight: "100vh",
   padding: "var(--sb-space-lg)",
-  overflow: "auto",
 };
 
 const header = {

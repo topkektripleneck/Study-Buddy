@@ -23,7 +23,12 @@ type NotificationHostProps = {
 };
 
 export function NotificationHost(props: NotificationHostProps = {}) {
-  const label = getCurrentWebviewWindow().label;
+  let label = "main";
+  try {
+    label = getCurrentWebviewWindow().label;
+  } catch {
+    label = "main";
+  }
   if (
     (props.variant ?? "inline") === "inline" &&
     (label === "toast" || label === "hud")

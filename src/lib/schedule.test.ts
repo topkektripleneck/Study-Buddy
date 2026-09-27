@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarTimeBlock } from "@/types";
 import {
+  addCalendarDays,
   findConflicts,
   overlapLayouts,
   parseTimeRange,
   parseTimeToken,
   resizeBlockEnd,
+  wheelPeriodStep,
 } from "./schedule";
 
 function block(id: string, start: string, end: string): CalendarTimeBlock {
@@ -64,6 +66,22 @@ describe("overlapLayouts", () => {
     expect(layouts.get("b")?.column).toBe(1);
     expect(layouts.get("a")?.columns).toBe(2);
     expect(layouts.get("b")?.columns).toBe(2);
+  });
+});
+
+describe("wheelPeriodStep", () => {
+  it("maps wheel delta to a single step", () => {
+    expect(wheelPeriodStep(120)).toBe(1);
+    expect(wheelPeriodStep(-50)).toBe(-1);
+    expect(wheelPeriodStep(0)).toBe(0);
+  });
+});
+
+describe("addCalendarDays", () => {
+  it("shifts local calendar days", () => {
+    const base = new Date(2026, 8, 27);
+    expect(addCalendarDays(base, 1).getDate()).toBe(28);
+    expect(addCalendarDays(base, -1).getDate()).toBe(26);
   });
 });
 

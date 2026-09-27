@@ -7,9 +7,11 @@ export function useWindowOpen(label: WindowLabel) {
 
   useEffect(() => {
     let active = true;
-    isWindowOpen(label).then((value) => {
-      if (active) setOpen(value);
-    });
+    isWindowOpen(label)
+      .then((value) => {
+        if (active) setOpen(value);
+      })
+      .catch(() => {});
 
     const off = safeListen<{ label: string; open: boolean }>("window:visibility", (event) => {
       if (event.payload.label === label) setOpen(event.payload.open);
@@ -22,10 +24,14 @@ export function useWindowOpen(label: WindowLabel) {
   }, [label]);
 
   const toggle = useCallback(async () => {
-    const next = await toggleWindow(label);
-    setOpen(next);
-    return next;
-  }, [label]);
+    try {
+      const next = await toggleWindow(label);
+      setOpen(next);
+      return next;
+    } catch {
+      return open;
+    }
+  }, [label, open]);
 
   return { open, toggle };
 }

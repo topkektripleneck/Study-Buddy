@@ -386,25 +386,55 @@ export interface Star {
   y: number;
   r: number;
   o: number;
+  kind: "pin" | "soft" | "diamond" | "cross" | "binary";
+  tone: "neutral" | "warm" | "cool";
+  rotation: number;
   twinkleDelay: number;
   twinkleDuration: number;
 }
 
-/** Deterministic starfield naturally scattered with PRNG — zero diagonal artifacts. */
+/** Deterministic starfield with varied silhouettes, temperature, and luminosity. */
 export const STARFIELD: Star[] = Array.from({ length: 180 }, () => {
   const x = Math.round(rng() * 1000) / 1000;
   const y = Math.round(rng() * 1000) / 1000;
-  const roll = rng();
-  // 75% subtle dust stars (0.7-1.1px), 18% medium stars (1.2-1.6px), 7% luminous focal stars (1.8-2.3px)
-  const r =
-    roll < 0.75
-      ? Math.round((0.7 + roll * 0.5) * 10) / 10
-      : roll < 0.93
-        ? Math.round((1.2 + (roll - 0.75) * 2.2) * 10) / 10
-        : Math.round((1.8 + (roll - 0.93) * 7) * 10) / 10;
-  const o = Math.round((0.25 + rng() * 0.55) * 100) / 100;
+  const sizeRoll = rng();
+  const r = sizeRoll < 0.58
+    ? 0.35 + rng() * 0.5
+    : sizeRoll < 0.84
+      ? 0.85 + rng() * 0.7
+      : sizeRoll < 0.95
+        ? 1.55 + rng() * 1.05
+        : 2.4 + rng() * 0.9;
+  const kindRoll = rng();
+  const kind: Star["kind"] = kindRoll < 0.56
+    ? "pin"
+    : kindRoll < 0.74
+      ? "soft"
+      : kindRoll < 0.87
+        ? "diamond"
+        : kindRoll < 0.96
+          ? "cross"
+          : "binary";
+  const toneRoll = rng();
+  const tone: Star["tone"] = toneRoll < 0.68
+    ? "neutral"
+    : toneRoll < 0.84
+      ? "warm"
+      : "cool";
+  const o = Math.round((0.18 + rng() * (kind === "pin" ? 0.62 : 0.76)) * 100) / 100;
+  const rotation = Math.round(rng() * 180);
   const twinkleDelay = Math.round(rng() * 50) / 10;
-  const twinkleDuration = Math.round((2.5 + rng() * 3.5) * 10) / 10;
+  const twinkleDuration = Math.round((2.8 + rng() * 4.8) * 10) / 10;
 
-  return { x, y, r, o, twinkleDelay, twinkleDuration };
+  return {
+    x,
+    y,
+    r: Math.round(r * 100) / 100,
+    o,
+    kind,
+    tone,
+    rotation,
+    twinkleDelay,
+    twinkleDuration,
+  };
 });

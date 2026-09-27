@@ -266,6 +266,7 @@ impl TimerActor {
         self.storage.clear_session()?;
         if let Some((phase, started_at, elapsed, completed)) = finished {
             self.record_interval(phase, started_at, elapsed, completed);
+            self.emit_phase(Some(phase), TimerPhase::Idle);
         }
         self.broadcast_idle();
         Ok(())
@@ -350,11 +351,20 @@ impl TimerActor {
     }
 
     pub fn refresh_metrics(&self) {
-        if let Ok(metric) = crate::metrics::recalculate(&self.storage) {
+        if let Ok(metric) = self.metrics_snapshot() {
             let _ = self.app.emit("metrics:changed", &metric);
             let config = self.inner.lock().config.clone();
             crate::notify::poll_metrics_notifications(self.app(), &config, &metric);
         }
+    }
+
+    pub fn metrics_snapshot(&self) -> Result<crate::models::ConsistencyMetric, AppError> {
+        let inner = self.inner.lock();
+        let active = inner.session.as_ref().filter(|s| matches!(s.phase, TimerPhase::Focus | TimerPhase::Stopwatch));
+        let date = active.and_then(|s| parse_iso(&s.anchor_at).ok())
+            .map(|dt| dt.with_timezone(&Local).format("%Y-%m-%d").to_string());
+        crate::metrics::snapshot(&self.storage, active.zip(date.as_deref())
+            .map(|(s, date)| (date, session_elapsed_ms(s))))
     }
 
     pub fn update_config(&self, config: AppConfig) {
@@ -437,13 +447,13 @@ impl TimerActor {
         let last = LAST.get_or_init(|| Mutex::new(Instant::now() - Duration::from_secs(120)));
         {
             let mut guard = last.lock();
-            if guard.elapsed() < Duration::from_secs(60) {
+            if guard.elapsed() < Duration::from_secs(5) {
                 return;
             }
             *guard = Instant::now();
         }
         let config = self.inner.lock().config.clone();
-        if let Ok(metric) = crate::metrics::recalculate(&self.storage) {
+        if let Ok(metric) = self.metrics_snapshot() {
             let _ = self.app.emit("metrics:changed", &metric);
             crate::notify::poll_metrics_notifications(self.app(), &config, &metric);
         }
@@ -693,6 +703,9 @@ mod tests {
             notify_quiet_end_hour: 8,
             eightbit_palette: "green".into(),
             autostart: false,
+            gcal_ics_url: None,
+            gcal_last_synced_at: None,
+            gcal_auto_sync: true,
         };
         assert_eq!(
             next_phase(&config, &sample_session(TimerPhase::Focus, 6)),

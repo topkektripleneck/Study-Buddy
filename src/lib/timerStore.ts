@@ -41,24 +41,22 @@ async function ensureTimer() {
 async function ensureMetrics() {
   if (metricsReady) return;
   metricsReady = true;
-  const rev = ++metricsRevision;
-  metrics = await api.metricsGet();
-  if (rev === metricsRevision) emitMetrics();
-
-  setInterval(async () => {
-    const r = ++metricsRevision;
-    const next = await api.metricsGet();
-    if (r === metricsRevision) {
-      metrics = next;
-      emitMetrics();
-    }
-  }, 60_000);
-
   safeListen<ConsistencyMetric>("metrics:changed", (event) => {
     metricsRevision += 1;
     metrics = event.payload;
     emitMetrics();
   });
+  await refreshMetrics();
+  setInterval(() => void refreshMetrics().catch(console.error), 60_000);
+}
+
+export async function refreshMetrics() {
+  const revision = ++metricsRevision;
+  const next = await api.metricsGet();
+  if (revision === metricsRevision) {
+    metrics = next;
+    emitMetrics();
+  }
 }
 
 export function subscribeTimer(listener: TimerListener): () => void {

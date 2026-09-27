@@ -15,21 +15,74 @@ import type {
   WidgetLayout,
 } from "@/types";
 
-export const api = {
-  openDataDir: () => invoke<void>("storage_open_data_dir"),
-  storageExportZip: (destPath: string) =>
-    invoke<string>("storage_export_zip", { destPath }),
-  storageImportZip: (srcPath: string) =>
-    invoke<string>("storage_import_zip", { srcPath }),
+function hasTauri(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+  );
+}
 
-  tasksList: () => invoke<TaskItem[]>("tasks_list"),
-  taskCreate: (title: string) => invoke<TaskItem>("task_create", { title }),
-  taskUpdate: (task: TaskItem) => invoke<TaskItem>("task_update", { task }),
+function safeInvoke<T>(cmd: string, args?: Record<string, unknown>, fallback?: T): Promise<T> {
+  if (!hasTauri()) {
+    return Promise.resolve(fallback as T);
+  }
+  return invoke<T>(cmd, args);
+}
+
+export const api = {
+  openDataDir: () => safeInvoke<void>("storage_open_data_dir"),
+  storageExportZip: (destPath: string) =>
+    safeInvoke<string>("storage_export_zip", { destPath }, ""),
+  storageImportZip: (srcPath: string) =>
+    safeInvoke<string>("storage_import_zip", { srcPath }, ""),
+
+  tasksList: () => safeInvoke<TaskItem[]>("tasks_list", undefined, []),
+  taskCreate: (title: string) =>
+    safeInvoke<TaskItem>("task_create", { title }, {
+      id: crypto.randomUUID(),
+      title,
+      status: "open",
+      priority: "normal",
+      order: 0,
+      parentId: null,
+      notes: null,
+      quadrant: null,
+      tags: [],
+      estimateMinutes: null,
+      actualMinutes: 0,
+      dueAt: null,
+      deferUntil: null,
+      linkedBlockIds: [],
+      checklist: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      completedAt: null,
+    }),
+  taskUpdate: (task: TaskItem) => safeInvoke<TaskItem>("task_update", { task }, task),
   taskToggleDone: (taskId: string) =>
-    invoke<TaskItem>("task_toggle_done", { taskId }),
-  taskDelete: (taskId: string) => invoke<void>("task_delete", { taskId }),
+    safeInvoke<TaskItem>("task_toggle_done", { taskId }, {
+      id: taskId,
+      title: "",
+      status: "done",
+      priority: "normal",
+      order: 0,
+      parentId: null,
+      notes: null,
+      quadrant: null,
+      tags: [],
+      estimateMinutes: null,
+      actualMinutes: 0,
+      dueAt: null,
+      deferUntil: null,
+      linkedBlockIds: [],
+      checklist: [],
+      createdAt: "",
+      updatedAt: "",
+      completedAt: new Date().toISOString(),
+    }),
+  taskDelete: (taskId: string) => safeInvoke<void>("task_delete", { taskId }),
   taskReorder: (orderedIds: string[]) =>
-    invoke<TaskItem[]>("task_reorder", { orderedIds }),
+    safeInvoke<TaskItem[]>("task_reorder", { orderedIds }, []),
 
   matrixGet: () => invoke<EisenhowerMatrixFile>("matrix_get"),
   matrixSetQuadrant: (taskId: string, quadrant: EisenhowerQuadrant) =>
@@ -49,26 +102,81 @@ export const api = {
       ...fields,
     }),
 
-  calendarList: () => invoke<CalendarTimeBlock[]>("calendar_list"),
+  calendarList: () => safeInvoke<CalendarTimeBlock[]>("calendar_list", undefined, []),
   calendarSaveBlock: (block: CalendarTimeBlock) =>
-    invoke<CalendarTimeBlock>("calendar_save_block", { block }),
+    safeInvoke<CalendarTimeBlock>("calendar_save_block", { block }, block),
   calendarDeleteBlock: (blockId: string) =>
-    invoke<void>("calendar_delete_block", { blockId }),
+    safeInvoke<void>("calendar_delete_block", { blockId }),
   calendarImportIcs: (srcPath: string) =>
-    invoke<CalendarImportResult>("calendar_import_ics", { srcPath }),
+    safeInvoke<CalendarImportResult>("calendar_import_ics", { srcPath }, {
+      imported: 0,
+      skipped: 0,
+      updated: 0,
+      removed: 0,
+      message: "",
+    }),
+  calendarSyncGcal: (force: boolean) =>
+    safeInvoke<CalendarImportResult>("calendar_sync_gcal", { force }, {
+      imported: 0,
+      skipped: 0,
+      updated: 0,
+      removed: 0,
+      message: "",
+    }),
+  calendarExportIcs: (destPath: string) =>
+    safeInvoke<string>("calendar_export_ics", { destPath }, ""),
 
-  metricsGet: () => invoke<ConsistencyMetric>("metrics_get"),
+  metricsGet: () => safeInvoke<ConsistencyMetric>("metrics_get", undefined, {
+    schemaVersion: 1,
+    currentStreakDays: 1,
+    longestStreakDays: 1,
+    streakAnchorDate: null,
+    todayFocusMs: 0,
+    todayCompletionPercent: 0,
+    dailyTargetMinutes: 120,
+    lastRecalculatedAt: new Date().toISOString(),
+  }),
   metricsSetTarget: (dailyTargetMinutes: number) =>
-    invoke<ConsistencyMetric>("metrics_set_target", { dailyTargetMinutes }),
+    safeInvoke<ConsistencyMetric>("metrics_set_target", { dailyTargetMinutes }, {
+      schemaVersion: 1,
+      currentStreakDays: 1,
+      longestStreakDays: 1,
+      streakAnchorDate: null,
+      todayFocusMs: 0,
+      todayCompletionPercent: 0,
+      dailyTargetMinutes,
+      lastRecalculatedAt: new Date().toISOString(),
+    }),
+  metricsSetStreak: (streakDays: number | null) =>
+    safeInvoke<ConsistencyMetric>("metrics_set_streak", { streakDays }, {
+      schemaVersion: 1,
+      currentStreakDays: streakDays ?? 0,
+      longestStreakDays: streakDays ?? 0,
+      streakAnchorDate: null,
+      todayFocusMs: 0,
+      todayCompletionPercent: 0,
+      dailyTargetMinutes: 120,
+      lastRecalculatedAt: new Date().toISOString(),
+      streakOverride: streakDays,
+    }),
   activityDailyTotals: (days: number) =>
-    invoke<DailyFocus[]>("activity_daily_totals", { days }),
+    safeInvoke<DailyFocus[]>("activity_daily_totals", { days }, []),
 
-  configGet: () => invoke<AppConfig>("config_get"),
-  configSave: (config: AppConfig) => invoke<AppConfig>("config_save", { config }),
-  notifyTest: () => invoke<void>("notify_test"),
+  configGet: () => safeInvoke<AppConfig>("config_get", undefined, {
+    schemaVersion: 1,
+    pomodoroFocusMinutes: 25,
+    pomodoroShortBreakMinutes: 5,
+    pomodoroLongBreakMinutes: 15,
+    pomodoroCycleLength: 4,
+    hudAutoShowOnSessionStart: true,
+    coloredTimeBlocks: true,
+    activeWidgets: ["focus", "clock"],
+  }),
+  configSave: (config: AppConfig) => safeInvoke<AppConfig>("config_save", { config }, config),
+  notifyTest: () => safeInvoke<void>("notify_test"),
 
-  layoutGet: () => invoke<WidgetLayout>("layout_get"),
-  layoutSave: (layout: WidgetLayout) => invoke<void>("layout_save", { layout }),
+  layoutGet: () => safeInvoke<WidgetLayout>("layout_get", undefined, { schemaVersion: 1, widgetIds: ["focus", "clock"] }),
+  layoutSave: (layout: WidgetLayout) => safeInvoke<void>("layout_save", { layout }),
 
   dataReset: (target: string) => invoke<string>("data_reset", { target }),
 

@@ -1,7 +1,7 @@
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useEffect } from "react";
 import { api } from "@/lib/api";
-import { playChime } from "@/lib/chimes";
+import { playChime, playStopwatchChime } from "@/lib/chimes";
 import { safeListen } from "@/lib/safeListen";
 
 interface TimerPhaseEvent {
@@ -11,7 +11,13 @@ interface TimerPhaseEvent {
 
 export function useChimes() {
   useEffect(() => {
-    if (getCurrentWebviewWindow().label !== "main") return;
+    let label = "main";
+    try {
+      label = getCurrentWebviewWindow().label;
+    } catch {
+      label = "main";
+    }
+    if (label !== "main") return;
 
     let config = { focusStartChimePath: null as string | null, focusEndChimePath: null as string | null };
     api.configGet().then((c) => {
@@ -32,7 +38,11 @@ export function useChimes() {
 
     const offPhase = safeListen<TimerPhaseEvent>("timer:phase", (event) => {
       const { from, to } = event.payload;
-      if (to === "focus") {
+      if (to === "stopwatch") {
+        void playStopwatchChime(config.focusStartChimePath);
+      } else if (from === "stopwatch") {
+        void playStopwatchChime(config.focusEndChimePath, true);
+      } else if (to === "focus") {
         void playChime(config.focusStartChimePath);
       } else if (from === "focus" && to !== "focus") {
         void playChime(config.focusEndChimePath);

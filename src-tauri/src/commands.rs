@@ -562,6 +562,12 @@ pub fn calendar_save_block(
         }
         crate::calendar::append_block(&mut blocks, block.clone());
     } else if let Some(idx) = blocks.iter().position(|b| b.id == block.id) {
+        let previous = &blocks[idx];
+        if previous.external_uid.is_some() {
+            block.external_uid = previous.external_uid.clone();
+            block.sync_source = previous.sync_source.clone();
+            block.locally_edited = true;
+        }
         blocks[idx] = block.clone();
     } else {
         blocks.push(block.clone());
@@ -586,22 +592,7 @@ pub fn calendar_import_ics(state: State<AppState>, src_path: String) -> Result<C
     let raw = fs::read_to_string(&src_path).map_err(|e| e.to_string())?;
     let events = crate::ics::parse(&raw).map_err(|e| e.to_string())?;
     let mut blocks = state.storage.read_calendar().map_err(|e| e.to_string())?;
-    let mut imported = 0u32;
-    let mut skipped = 0u32;
-
-    for event in events {
-        let block = crate::ics::to_block(&event);
-        if blocks
-            .iter()
-            .any(|b| b.title == block.title && b.start_at == block.start_at)
-        {
-            skipped += 1;
-            continue;
-        }
-        crate::calendar::append_block(&mut blocks, block);
-        imported += 1;
-    }
-
+    let result = crate::ics::merge_events(&mut blocks, &events);
     state
         .storage
         .write_calendar(&blocks)
@@ -611,17 +602,89 @@ pub fn calendar_import_ics(state: State<AppState>, src_path: String) -> Result<C
         "calendar:changed",
         serde_json::json!({ "kind": "imported", "revision": rev }),
     );
+    Ok(result)
+}
 
-    let message = if imported == 0 {
-        "No new events imported (all duplicates or empty file)".into()
-    } else {
-        format!("Imported {imported} event(s) from Google Calendar export")
+#[tauri::command]
+pub fn calendar_sync_gcal(state: State<AppState>, force: bool) -> Result<CalendarImportResult, String> {
+    let mut config = state.storage.read_config().map_err(|e| e.to_string())?;
+    let Some(url) = config
+        .gcal_ics_url
+        .clone()
+        .filter(|u| !u.trim().is_empty())
+    else {
+        return Ok(CalendarImportResult {
+            imported: 0,
+            updated: 0,
+            skipped: 0,
+            removed: 0,
+            message: "No Google Calendar URL saved".into(),
+        });
     };
-    Ok(CalendarImportResult {
-        imported,
-        skipped,
-        message,
-    })
+    if !force && !config.gcal_auto_sync {
+        return Ok(CalendarImportResult {
+            imported: 0,
+            updated: 0,
+            skipped: 0,
+            removed: 0,
+            message: "Auto-sync is off".into(),
+        });
+    }
+    if !force && recently_synced(&config) {
+        return Ok(CalendarImportResult {
+            imported: 0,
+            updated: 0,
+            skipped: 0,
+            removed: 0,
+            message: "Already synced recently".into(),
+        });
+    }
+
+    let raw = crate::ics::fetch_ics(&url).map_err(|e| e.to_string())?;
+    let events = crate::ics::parse(&raw).map_err(|e| e.to_string())?;
+    let mut blocks = state.storage.read_calendar().map_err(|e| e.to_string())?;
+    let result = crate::ics::merge_events(&mut blocks, &events);
+    state
+        .storage
+        .write_calendar(&blocks)
+        .map_err(|e| e.to_string())?;
+    config.gcal_last_synced_at = Some(now_iso());
+    state
+        .storage
+        .write_config(&config)
+        .map_err(|e| e.to_string())?;
+    let rev = state.bump_revision();
+    let app = state.timer.app();
+    let _ = app.emit(
+        "calendar:changed",
+        serde_json::json!({ "kind": "synced", "revision": rev }),
+    );
+    let _ = app.emit(
+        "config:changed",
+        serde_json::json!({ "patchedKeys": ["gcalLastSyncedAt"], "revision": rev }),
+    );
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn calendar_export_ics(state: State<AppState>, dest_path: String) -> Result<String, String> {
+    let blocks = state.storage.read_calendar().map_err(|e| e.to_string())?;
+    let ics = crate::ics::export_ics(&blocks);
+    std::fs::write(&dest_path, ics).map_err(|e| e.to_string())?;
+    Ok(format!("Exported {path}", path = dest_path))
+}
+
+fn recently_synced(config: &AppConfig) -> bool {
+    let Some(at) = &config.gcal_last_synced_at else {
+        return false;
+    };
+    match chrono::DateTime::parse_from_rfc3339(at) {
+        Ok(dt) => {
+            let age = chrono::Utc::now().signed_duration_since(dt.with_timezone(&chrono::Utc));
+            age < chrono::Duration::minutes(15)
+        }
+        Err(_) => false,
+    }
 }
 
 #[tauri::command]
@@ -669,7 +732,7 @@ pub fn calendar_delete_block(state: State<AppState>, block_id: String) -> Result
 
 #[tauri::command]
 pub fn metrics_get(state: State<AppState>) -> Result<ConsistencyMetric, String> {
-    state.storage.read_metrics().map_err(|e| e.to_string())
+    state.timer.metrics_snapshot().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -682,7 +745,14 @@ pub fn activity_daily_totals(
         .read_metrics()
         .map(|m| m.daily_target_minutes)
         .unwrap_or(120);
-    Ok(state.storage.daily_focus_totals(days, target)?)
+    let mut history = state.storage.daily_focus_totals(days, target)?;
+    let live = state.timer.metrics_snapshot().map_err(|e| e.to_string())?;
+    if let Some(today) = history.last_mut() {
+        today.focus_ms = live.today_focus_ms;
+        today.met_target = today.focus_ms >= target as u64 * 60_000;
+    }
+    crate::metrics::mark_current_streak(&mut history);
+    Ok(history)
 }
 
 #[tauri::command]
@@ -691,7 +761,16 @@ pub fn config_get(state: State<AppState>) -> Result<AppConfig, String> {
 }
 
 #[tauri::command]
-pub fn config_save(state: State<AppState>, config: AppConfig) -> Result<AppConfig, String> {
+pub fn config_save(state: State<AppState>, mut config: AppConfig) -> Result<AppConfig, String> {
+    if let Some(url) = config.gcal_ics_url.as_ref() {
+        let trimmed = url.trim();
+        if trimmed.is_empty() {
+            config.gcal_ics_url = None;
+        } else {
+            crate::ics::validate_gcal_url(trimmed).map_err(|e| e.to_string())?;
+            config.gcal_ics_url = Some(trimmed.to_string());
+        }
+    }
     state.timer.update_config(config.clone());
     state
         .storage
@@ -865,8 +944,15 @@ pub fn metrics_set_target(
     daily_target_minutes: u32,
 ) -> Result<ConsistencyMetric, String> {
     let mut metrics = state.storage.read_metrics().map_err(|e| e.to_string())?;
-    metrics.daily_target_minutes = daily_target_minutes.max(1);
+    if !(1..=480).contains(&daily_target_minutes) {
+        return Err("Daily target must be between 1 and 480 minutes".into());
+    }
+    metrics.daily_target_minutes = daily_target_minutes;
     metrics.last_recalculated_at = now_iso();
+    state
+        .storage
+        .write_metrics(&metrics)
+        .map_err(|e| e.to_string())?;
     if let Ok(fresh) = crate::metrics::recalculate(&state.storage) {
         metrics = fresh;
     }
@@ -877,6 +963,34 @@ pub fn metrics_set_target(
     let _ = state.timer.app().emit("metrics:changed", &metrics);
     Ok(metrics)
 }
+
+#[tauri::command]
+pub fn metrics_set_streak(
+    state: State<AppState>,
+    streak_days: Option<u32>,
+) -> Result<ConsistencyMetric, String> {
+    let mut metrics = state.storage.read_metrics().map_err(|e| e.to_string())?;
+    metrics.streak_override = streak_days;
+    if let Some(days) = streak_days {
+        metrics.current_streak_days = days;
+        metrics.longest_streak_days = metrics.longest_streak_days.max(days);
+    }
+    metrics.last_recalculated_at = now_iso();
+    state
+        .storage
+        .write_metrics(&metrics)
+        .map_err(|e| e.to_string())?;
+    if let Ok(fresh) = crate::metrics::recalculate(&state.storage) {
+        metrics = fresh;
+    }
+    state
+        .storage
+        .write_metrics(&metrics)
+        .map_err(|e| e.to_string())?;
+    let _ = state.timer.app().emit("metrics:changed", &metrics);
+    Ok(metrics)
+}
+
 
 #[tauri::command]
 pub fn journal_list(state: State<AppState>) -> Result<Vec<JournalEntry>, String> {

@@ -2,7 +2,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useState } from "react";
 import { useListen } from "@/hooks/useListen";
 import { useWindowOpen } from "@/hooks/useWindowOpen";
-import { setDailyTarget, resetData, importCalendarIcs } from "@/lib/actions";
+import { setDailyTarget, resetData, importCalendarIcs, exportCalendarIcs, syncGoogleCalendar, setCurrentStreak } from "@/lib/actions";
 import { api } from "@/lib/api";
 import { playChime } from "@/lib/chimes";
 import {
@@ -55,6 +55,11 @@ export function SettingsPanel({ onClose, initialSection }: SettingsPanelProps) {
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importingIcs, setImportingIcs] = useState(false);
+  const [exportingIcs, setExportingIcs] = useState(false);
+  const [syncingGcal, setSyncingGcal] = useState(false);
+  const [gcalUrl, setGcalUrl] = useState("");
+  const [streakDays, setStreakDays] = useState(0);
+  const [streakOverridden, setStreakOverridden] = useState(false);
   const [dailyTargetMinutes, setDailyTargetMinutes] = useState(120);
   const [pomodoroDraft, setPomodoroDraft] = useState({
     pomodoroFocusMinutes: 25,
@@ -67,6 +72,7 @@ export function SettingsPanel({ onClose, initialSection }: SettingsPanelProps) {
   useEffect(() => {
     api.configGet().then((loaded) => {
       setConfig(loaded);
+      setGcalUrl(loaded.gcalIcsUrl ?? "");
       setPomodoroDraft({
         pomodoroFocusMinutes: loaded.pomodoroFocusMinutes,
         pomodoroShortBreakMinutes: loaded.pomodoroShortBreakMinutes,
@@ -77,11 +83,19 @@ export function SettingsPanel({ onClose, initialSection }: SettingsPanelProps) {
         .then((autostart) => setConfig((prev) => (prev ? { ...prev, autostart } : prev)))
         .catch(() => {});
     });
-    api.metricsGet().then((m) => setDailyTargetMinutes(m.dailyTargetMinutes));
+    api.metricsGet().then((m) => {
+      setDailyTargetMinutes(m.dailyTargetMinutes);
+      setStreakDays(m.currentStreakDays);
+      setStreakOverridden(m.streakOverride !== undefined && m.streakOverride !== null);
+    });
   }, []);
 
   const refreshDailyTarget = useCallback(() => {
-    api.metricsGet().then((m) => setDailyTargetMinutes(m.dailyTargetMinutes));
+    api.metricsGet().then((m) => {
+      setDailyTargetMinutes(m.dailyTargetMinutes);
+      setStreakDays(m.currentStreakDays);
+      setStreakOverridden(m.streakOverride !== undefined && m.streakOverride !== null);
+    });
   }, []);
 
   useListen(refreshDailyTarget, "metrics:changed");
@@ -106,7 +120,7 @@ export function SettingsPanel({ onClose, initialSection }: SettingsPanelProps) {
   }
 
   async function saveDailyTarget() {
-    const clamped = Math.min(480, Math.max(15, dailyTargetMinutes || 120));
+    const clamped = Math.min(480, Math.max(1, dailyTargetMinutes || 120));
     setDailyTargetMinutes(clamped);
     await setDailyTarget(clamped);
     flashSaved();
@@ -422,15 +436,57 @@ export function SettingsPanel({ onClose, initialSection }: SettingsPanelProps) {
                 <span>Target (minutes)</span>
                 <input
                   type="number"
-                  min={15}
+                  min={1}
                   max={480}
-                  step={15}
+                  step={5}
                   className="sb-input sb-input-narrow"
                   value={dailyTargetMinutes}
                   onChange={(e) => setDailyTargetMinutes(Number(e.target.value))}
                   onBlur={saveDailyTarget}
                 />
               </label>
+
+              <p className="sb-settings-section-title" style={{ marginTop: 20 }}>
+                Streak
+              </p>
+              <p className="sb-settings-section-desc">
+                Streaks count consecutive days you hit the daily goal. One missed day is
+                forgiven automatically. Override only if you need to match a count from
+                somewhere else.
+              </p>
+              <label className="sb-settings-row">
+                <span>Current streak (days)</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={9999}
+                  className="sb-input sb-input-narrow"
+                  value={streakDays}
+                  onChange={(e) => setStreakDays(Math.max(0, Number(e.target.value) || 0))}
+                  onBlur={async () => {
+                    const result = await setCurrentStreak(streakDays);
+                    if (result.ok) {
+                      setStreakOverridden(true);
+                      flashSaved();
+                    }
+                  }}
+                />
+              </label>
+              {streakOverridden && (
+                <PressableEnergy
+                  variant="ghost"
+                  onClick={async () => {
+                    const result = await setCurrentStreak(null);
+                    if (result.ok) {
+                      setStreakOverridden(false);
+                      flashSaved();
+                      refreshDailyTarget();
+                    }
+                  }}
+                >
+                  Back to automatic streak
+                </PressableEnergy>
+              )}
 
               <p className="sb-settings-section-title" style={{ marginTop: 20 }}>
                 Pomodoro
@@ -505,7 +561,7 @@ export function SettingsPanel({ onClose, initialSection }: SettingsPanelProps) {
               </label>
 
               <p className="sb-settings-section-title" style={{ marginTop: 20 }}>
-                Focus chimes
+                Focus & stopwatch chimes
               </p>
               <div className="sb-chime-row">
                 <span>Focus start</span>
@@ -571,33 +627,105 @@ export function SettingsPanel({ onClose, initialSection }: SettingsPanelProps) {
               </label>
 
               <p className="sb-settings-section-title" style={{ marginTop: 20 }}>
-                Import
+                Google Calendar
               </p>
               <p className="sb-settings-section-desc">
-                Import events from a Google Calendar .ics export. Events become
-                Focus blocks; duplicates (same title + start time) are skipped.
+                Pull-sync uses Google&apos;s secret iCal URL — no Google account login in
+                Study Buddy. In Google Calendar: Settings → your calendar → Integrate
+                calendar → Secret address in iCal format. Events upsert by UID; blocks you
+                edit here are not overwritten. This is inbound only; export an .ics to
+                send blocks the other way.
               </p>
-              <PressableEnergy
-                variant="ghost"
-                disabled={importingIcs}
-                onClick={async () => {
-                  const src = await open({
-                    multiple: false,
-                    filters: [{ name: "iCalendar", extensions: ["ics"] }],
-                  });
-                  if (!src || typeof src !== "string") return;
-                  setImportingIcs(true);
-                  try {
-                    const result = await importCalendarIcs(src);
-                    window.alert(result.message);
-                    flashSaved();
-                  } finally {
-                    setImportingIcs(false);
-                  }
-                }}
-              >
-                {importingIcs ? "Importing…" : "Import Google Calendar (.ics)"}
-              </PressableEnergy>
+              <label className="sb-settings-row" style={{ alignItems: "flex-start" }}>
+                <span>Secret iCal URL</span>
+                <input
+                  type="url"
+                  className="sb-input"
+                  style={{ flex: 1, minWidth: "220px" }}
+                  placeholder="https://calendar.google.com/calendar/ical/…"
+                  value={gcalUrl}
+                  onChange={(e) => setGcalUrl(e.target.value)}
+                  onBlur={() => update({ gcalIcsUrl: gcalUrl.trim() || null })}
+                />
+              </label>
+              <label className="sb-settings-row">
+                <span>Auto-sync when the calendar opens</span>
+                <input
+                  type="checkbox"
+                  checked={config.gcalAutoSync ?? true}
+                  onChange={(e) => update({ gcalAutoSync: e.target.checked })}
+                />
+              </label>
+              {config.gcalLastSyncedAt && (
+                <p className="sb-settings-section-desc">
+                  Last synced {new Date(config.gcalLastSyncedAt).toLocaleString()}
+                </p>
+              )}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                <PressableEnergy
+                  variant="ghost"
+                  disabled={syncingGcal || !gcalUrl.trim()}
+                  onClick={async () => {
+                    setSyncingGcal(true);
+                    try {
+                      if (gcalUrl.trim() && gcalUrl !== (config.gcalIcsUrl ?? "")) {
+                        await update({ gcalIcsUrl: gcalUrl.trim() });
+                      }
+                      const result = await syncGoogleCalendar(true);
+                      window.alert(result.message);
+                      flashSaved();
+                      const loaded = await api.configGet();
+                      setConfig(loaded);
+                    } finally {
+                      setSyncingGcal(false);
+                    }
+                  }}
+                >
+                  {syncingGcal ? "Syncing…" : "Sync now"}
+                </PressableEnergy>
+                <PressableEnergy
+                  variant="ghost"
+                  disabled={exportingIcs}
+                  onClick={async () => {
+                    const dest = await save({
+                      defaultPath: `study-buddy-calendar-${new Date().toISOString().slice(0, 10)}.ics`,
+                      filters: [{ name: "iCalendar", extensions: ["ics"] }],
+                    });
+                    if (!dest || typeof dest !== "string") return;
+                    setExportingIcs(true);
+                    try {
+                      const result = await exportCalendarIcs(dest);
+                      window.alert(result.message);
+                      flashSaved();
+                    } finally {
+                      setExportingIcs(false);
+                    }
+                  }}
+                >
+                  {exportingIcs ? "Exporting…" : "Export .ics"}
+                </PressableEnergy>
+                <PressableEnergy
+                  variant="ghost"
+                  disabled={importingIcs}
+                  onClick={async () => {
+                    const src = await open({
+                      multiple: false,
+                      filters: [{ name: "iCalendar", extensions: ["ics"] }],
+                    });
+                    if (!src || typeof src !== "string") return;
+                    setImportingIcs(true);
+                    try {
+                      const result = await importCalendarIcs(src);
+                      window.alert(result.message);
+                      flashSaved();
+                    } finally {
+                      setImportingIcs(false);
+                    }
+                  }}
+                >
+                  {importingIcs ? "Importing…" : "Import .ics file"}
+                </PressableEnergy>
+              </div>
             </>
           )}
 

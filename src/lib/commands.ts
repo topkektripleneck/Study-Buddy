@@ -6,6 +6,8 @@ import {
   exportBackup,
   importBackup,
   importCalendarIcs,
+  exportCalendarIcs,
+  syncGoogleCalendar,
   findTaskByQuery,
   navigateTo,
   openSettings,
@@ -250,9 +252,23 @@ export const COMMANDS: CommandSpec[] = [
   {
     id: "gcal",
     names: ["gcal", "ics"],
-    usage: "gcal",
-    summary: "Import a Google Calendar .ics export",
-    run: async () => {
+    usage: "gcal [sync|export|import]",
+    summary: "Sync, export, or import a Google Calendar .ics feed",
+    run: async (args) => {
+      const verb = args[0]?.toLowerCase() ?? "import";
+      if (verb === "sync") {
+        return syncGoogleCalendar(true);
+      }
+      if (verb === "export") {
+        const dest = await save({
+          defaultPath: `study-buddy-calendar-${new Date().toISOString().slice(0, 10)}.ics`,
+          filters: [{ name: "iCalendar", extensions: ["ics"] }],
+        });
+        if (!dest || typeof dest !== "string") {
+          return { ok: false, message: "Export cancelled" };
+        }
+        return exportCalendarIcs(dest);
+      }
       const src = await open({
         multiple: false,
         filters: [{ name: "iCalendar", extensions: ["ics"] }],

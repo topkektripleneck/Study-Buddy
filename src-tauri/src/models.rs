@@ -163,13 +163,25 @@ pub struct CalendarTimeBlock {
     pub series_id: Option<Uuid>,
     pub created_at: Iso8601,
     pub updated_at: Iso8601,
+    /// ICS UID from Google Calendar (or another feed). Used to upsert on sync.
+    #[serde(default)]
+    pub external_uid: Option<String>,
+    #[serde(default)]
+    pub sync_source: Option<String>,
+    /// Once the user edits a synced block, later pulls skip it.
+    #[serde(default)]
+    pub locally_edited: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CalendarImportResult {
     pub imported: u32,
+    #[serde(default)]
+    pub updated: u32,
     pub skipped: u32,
+    #[serde(default)]
+    pub removed: u32,
     pub message: String,
 }
 
@@ -202,6 +214,8 @@ pub struct DailyFocus {
     pub date: String,
     pub focus_ms: u64,
     pub met_target: bool,
+    #[serde(default)]
+    pub in_current_streak: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -215,6 +229,11 @@ pub struct ConsistencyMetric {
     pub today_focus_ms: u64,
     pub today_completion_percent: u32,
     pub last_recalculated_at: Iso8601,
+    #[serde(default)]
+    pub streak_override: Option<u32>,
+    /// True when the current automatic streak used its one-day grace miss.
+    #[serde(default)]
+    pub streak_freeze_used: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -252,6 +271,13 @@ pub struct AppConfig {
     pub eightbit_palette: String,
     #[serde(default = "default_false")]
     pub autostart: bool,
+    /// Google Calendar secret iCal URL (Settings → Integrate calendar).
+    #[serde(default)]
+    pub gcal_ics_url: Option<String>,
+    #[serde(default)]
+    pub gcal_last_synced_at: Option<Iso8601>,
+    #[serde(default = "default_true")]
+    pub gcal_auto_sync: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -139,6 +139,9 @@ fn instance_from_anchor(
         series_id: Some(series_id.to_string()),
         created_at: now_iso(),
         updated_at: now_iso(),
+        external_uid: None,
+        sync_source: None,
+        locally_edited: false,
     }
 }
 
@@ -163,6 +166,9 @@ mod tests {
             series_id: None,
             created_at: now_iso(),
             updated_at: now_iso(),
+            external_uid: None,
+            sync_source: None,
+            locally_edited: false,
         }
     }
 

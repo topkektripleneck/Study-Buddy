@@ -57,7 +57,9 @@ export interface PendingConflict {
 /** Result from importing a Google Calendar .ics export. */
 export interface CalendarImportResult {
   imported: number;
+  updated?: number;
   skipped: number;
+  removed?: number;
   message: string;
 }
 
@@ -149,12 +151,16 @@ export interface CalendarTimeBlock {
   seriesId: Uuid | null;
   createdAt: Iso8601;
   updatedAt: Iso8601;
+  externalUid?: string | null;
+  syncSource?: string | null;
+  locallyEdited?: boolean;
 }
 
 export interface DailyFocus {
   date: string;
   focusMs: number;
   metTarget: boolean;
+  inCurrentStreak?: boolean;
 }
 
 export interface ConsistencyMetric {
@@ -166,6 +172,8 @@ export interface ConsistencyMetric {
   todayFocusMs: number;
   todayCompletionPercent: number;
   lastRecalculatedAt: Iso8601;
+  streakOverride?: number | null;
+  streakFreezeUsed?: boolean;
 }
 
 import type { ThemeId, ZodiacSign, EightbitPalette } from "@/lib/themes";
@@ -191,6 +199,9 @@ export interface AppConfig {
   themeId?: ThemeId;
   zodiacSign?: ZodiacSign;
   autostart?: boolean;
+  gcalIcsUrl?: string | null;
+  gcalLastSyncedAt?: string | null;
+  gcalAutoSync?: boolean;
 }
 
 export interface EnergyLogEntry {

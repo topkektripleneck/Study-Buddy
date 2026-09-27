@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useListen } from "@/hooks/useListen";
 import { useMetrics } from "@/hooks/useTimer";
 import { setDailyTarget } from "@/lib/actions";
 import { PressableEnergy, Surface } from "@/ui/kit";
@@ -13,30 +12,34 @@ export function TargetRingWidget() {
   const targetMinutes = metrics?.dailyTargetMinutes ?? 120;
   const [draftTarget, setDraftTarget] = useState(targetMinutes);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraftTarget(targetMinutes);
   }, [targetMinutes]);
 
-  useListen(refresh, "metrics:changed");
-
   const focusMinutes = Math.round((metrics?.todayFocusMs ?? 0) / 60_000);
-  const ratio = targetMinutes > 0 ? focusMinutes / targetMinutes : 0;
-  const percent = Math.round(ratio * 100);
-  const remaining = Math.max(targetMinutes - focusMinutes, 0);
+  const ratio = targetMinutes > 0 ? (metrics?.todayFocusMs ?? 0) / (targetMinutes * 60_000) : 0;
+  const percent = Math.min(100, Math.floor(ratio * 100));
+  const remaining = Math.max(Math.ceil(targetMinutes - (metrics?.todayFocusMs ?? 0) / 60_000), 0);
 
   async function applyTarget(minutes: number) {
-    const next = Math.min(480, Math.max(15, minutes));
+    const next = Math.min(480, Math.max(1, minutes));
     setDraftTarget(next);
     setSaving(true);
-    await setDailyTarget(next);
-    await refresh();
-    setSaving(false);
+    try {
+      const result = await setDailyTarget(next);
+      setError(result.ok ? null : result.message);
+      await refresh();
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
     <Surface padding="md">
       <h3 style={title}>Daily Target</h3>
+      {error && <p role="alert">{error}</p>}
       <div style={ringWrap}>
         <svg viewBox="0 0 120 120" style={svg} role="img" aria-label={`${percent}% of daily focus target`}>
           <circle cx="60" cy="60" r={RADIUS} fill="none" stroke="var(--sb-bg-base)" strokeWidth="10" />
@@ -74,7 +77,7 @@ export function TargetRingWidget() {
               key={m}
               type="button"
               className="sb-pressable sb-pressable-hover"
-              style={{ ...chip, ...(targetMinutes === m ? chipActive : {}) }}
+              style={{ ...chip, ...(draftTarget === m ? chipActive : {}) }}
               disabled={saving}
               onClick={() => applyTarget(m)}
             >
@@ -85,19 +88,22 @@ export function TargetRingWidget() {
         <div style={customRow}>
           <input
             type="number"
-            min={15}
+            min={1}
             max={480}
-            step={15}
+            step={5}
             className="sb-input sb-input-narrow"
-            value={draftTarget}
+            value={draftTarget || ""}
             disabled={saving}
             aria-label="Daily focus goal in minutes"
-            onChange={(e) => setDraftTarget(Number(e.target.value) || 15)}
+            onChange={(e) => {
+              const val = e.target.value === "" ? 0 : Number(e.target.value);
+              setDraftTarget(val);
+            }}
             onKeyDown={(e) => {
-              if (e.key === "Enter") void applyTarget(draftTarget);
+              if (e.key === "Enter") void applyTarget(draftTarget || 1);
             }}
           />
-          <PressableEnergy variant="ghost" onClick={() => applyTarget(draftTarget)} disabled={saving}>
+          <PressableEnergy variant="ghost" onClick={() => applyTarget(draftTarget || 1)} disabled={saving}>
             Set
           </PressableEnergy>
         </div>

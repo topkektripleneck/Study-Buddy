@@ -7,7 +7,6 @@ import { ZodiacBackdrop } from "@/components/ZodiacBackdrop";
 import { useWindowOpen } from "@/hooks/useWindowOpen";
 import { onNavigate, onOpenSettings, openSettings } from "@/lib/actions";
 import { KineticStack, PressableEnergy } from "@/ui/kit";
-import { MatrixView } from "@/views/MatrixView";
 import { ScheduleView } from "@/views/ScheduleView";
 import { WidgetsView } from "@/views/WidgetsView";
 import type { MainTab, SettingsSection } from "@/types";
@@ -15,7 +14,6 @@ import type { MainTab, SettingsSection } from "@/types";
 const TABS: { id: MainTab; label: string }[] = [
   { id: "widgets", label: "Widgets" },
   { id: "schedule", label: "Schedule / Calendar" },
-  { id: "matrix", label: "Eisenhower Matrix" },
 ];
 
 export function MainPage() {
@@ -85,15 +83,12 @@ export function MainPage() {
 
       <ConsistencyBar />
 
-      <main style={content} role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+      <main className="sb-main-panel" style={content} role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
         <div className="sb-tab-panel" hidden={tab !== "widgets"}>
           <WidgetsView />
         </div>
-        <div className="sb-tab-panel" hidden={tab !== "schedule"}>
-          <ScheduleView />
-        </div>
-        <div className="sb-tab-panel" hidden={tab !== "matrix"}>
-          <MatrixView />
+        <div className="sb-tab-panel sb-tab-panel--fill" hidden={tab !== "schedule"}>
+          <ScheduleView initialViewMode="month" />
         </div>
       </main>
 
@@ -114,9 +109,7 @@ export function MainPage() {
 }
 
 const page = {
-  minHeight: "100vh",
   padding: "var(--sb-space-lg)",
-  overflow: "auto",
 };
 
 const header = {
@@ -164,6 +157,5 @@ const tabActive = {
 };
 
 const content = {
-  minHeight: "480px",
   paddingBottom: "72px",
 };

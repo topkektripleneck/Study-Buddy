@@ -413,6 +413,7 @@ impl StorageEngine {
                     met_target: target_ms > 0 && focus_ms >= target_ms,
                     date,
                     focus_ms,
+                    in_current_streak: false,
                 }
             })
             .collect())
@@ -649,6 +650,9 @@ fn default_config() -> AppConfig {
         notify_quiet_end_hour: 8,
         eightbit_palette: default_eightbit_palette(),
         autostart: false,
+        gcal_ics_url: None,
+        gcal_last_synced_at: None,
+        gcal_auto_sync: true,
     }
 }
 
@@ -671,6 +675,8 @@ fn default_metrics() -> ConsistencyMetric {
         today_focus_ms: 0,
         today_completion_percent: 0,
         last_recalculated_at: Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        streak_override: None,
+        streak_freeze_used: false,
     }
 }
 

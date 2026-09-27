@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { formatTimerMs, subscribeMetrics, subscribeTimer } from "@/lib/timerStore";
+import { formatTimerMs, refreshMetrics, subscribeMetrics, subscribeTimer } from "@/lib/timerStore";
 import type { ConsistencyMetric, TimerTickPayload } from "@/types";
 
 export function useTimer() {
@@ -27,5 +27,5 @@ export function useMetrics() {
 
   useEffect(() => subscribeMetrics(setMetrics), []);
 
-  return { metrics, refresh: async () => setMetrics(await import("@/lib/api").then((m) => m.api.metricsGet())) };
+  return { metrics, refresh: refreshMetrics };
 }

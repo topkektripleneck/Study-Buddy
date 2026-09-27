@@ -106,6 +106,20 @@ export function isSameLocalDay(iso: string, date = new Date()): boolean {
   return new Date(iso).toDateString() === date.toDateString();
 }
 
+/** Maps wheel delta to one step backward (-1), forward (1), or none (0). */
+export function wheelPeriodStep(deltaY: number): -1 | 0 | 1 {
+  if (deltaY === 0) return 0;
+  return deltaY > 0 ? 1 : -1;
+}
+
+/** Local calendar day shifted by `days` (negative = earlier). */
+export function addCalendarDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
 /** Monday-start week containing `base`. */
 export function localWeekDates(base = new Date()): Date[] {
   const day = base.getDay();

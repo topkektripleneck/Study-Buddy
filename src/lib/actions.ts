@@ -231,14 +231,42 @@ export async function importCalendarIcs(srcPath: string): Promise<ActionResult> 
   });
 }
 
+export async function syncGoogleCalendar(force = true): Promise<ActionResult> {
+  return ipc(async () => {
+    const result = await api.calendarSyncGcal(force);
+    return { ok: true, message: result.message };
+  });
+}
+
+export async function exportCalendarIcs(destPath: string): Promise<ActionResult> {
+  return ipc(async () => {
+    const message = await api.calendarExportIcs(destPath);
+    return { ok: true, message };
+  });
+}
+
 export async function setDailyTarget(minutes: number): Promise<ActionResult> {
-  const clamped = Math.min(480, Math.max(15, Math.round(minutes)));
+  const clamped = Math.min(480, Math.max(1, Math.round(minutes)));
   if (!Number.isFinite(clamped)) {
     return { ok: false, message: "Target must be a number of minutes" };
   }
   return ipc(async () => {
     await api.metricsSetTarget(clamped);
     return { ok: true, message: `Daily target set to ${clamped}m` };
+  });
+}
+
+export async function setCurrentStreak(streakDays: number | null): Promise<ActionResult> {
+  const clamped = streakDays === null ? null : Math.max(0, Math.round(streakDays));
+  if (clamped !== null && !Number.isFinite(clamped)) {
+    return { ok: false, message: "Streak must be a valid number of days" };
+  }
+  return ipc(async () => {
+    await api.metricsSetStreak(clamped);
+    return {
+      ok: true,
+      message: clamped === null ? "Streak reset to automatic" : `Current streak set to ${clamped}d`,
+    };
   });
 }
 
